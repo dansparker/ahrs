@@ -37,6 +37,7 @@ void ahrs_init(ahrs_t* a, const ahrs_config_t* cfg) {
     a->cfg = *cfg;
     magcal_init(&a->mc);
     a->gnss = GNSS_NONE;
+    for (int i = 0; i < 3; ++i) a->T[i][i] = 1.0f;
     a->alpha_est = cfg->alpha0_deg * DEG2RAD;
     a->wP[0][0] = sq(30.0f);
     a->wP[1][1] = a->wP[2][2] = sq(20.0f);
@@ -164,8 +165,102 @@ static void pseudo_measurements(ahrs_t* a) {
     }
 }
 
-void ahrs_imu(ahrs_t* a, const float gyro[3], const float acc[3], float dt) {
+static void realign(ahrs_t* a) {
+    a->aligned = 0;
+    memset(a->acc_sum, 0, sizeof(a->acc_sum));
+    memset(a->gyro_sum, 0, sizeof(a->gyro_sum));
+    a->gyro_max = 0.0f;
+    a->align_n = 0;
+    a->t_align_start = a->t;
+    a->ever_fused = 0; /* the next fix re-initialises position and velocity */
+}
+
+void ahrs_set_mount(ahrs_t* a, const float rpy[3]) {
+    for (int i = 0; i < 3; ++i) a->mount_rpy[i] = rpy[i];
+    quat_to_dcm(quat_from_euler(rpy[0] * DEG2RAD, rpy[1] * DEG2RAD, rpy[2] * DEG2RAD), a->T);
+    a->mount_changed = 1;
+    realign(a);
+}
+
+int ahrs_take_mount_changed(ahrs_t* a) {
+    const int c = a->mount_changed;
+    a->mount_changed = 0;
+    return c;
+}
+
+int ahrs_on_ground(const ahrs_t* a) {
+    if (!a->stationary) return 0;
+    return a->gnss == GNSS_OK ? a->last_gs < 1.0f : !a->ever_moved;
+}
+
+int ahrs_level_start(ahrs_t* a) {
+    if (a->level_active) return AHRS_ALIGN_BUSY;
+    if (!a->aligned) return AHRS_ALIGN_NOT_READY;
+    if (!ahrs_on_ground(a)) return AHRS_ALIGN_NOT_ON_GROUND;
+    a->level_active = 1;
+    a->level_done = 0;
+    a->level_t0 = a->t;
+    a->level_n = 0;
+    memset(a->level_sum, 0, sizeof(a->level_sum));
+    return AHRS_ALIGN_OK;
+}
+
+int ahrs_level_poll(ahrs_t* a, int* status) {
+    if (!a->level_done) return 0;
+    a->level_done = 0;
+    *status = a->level_status;
+    return 1;
+}
+
+static void level_finish(ahrs_t* a, int status) {
+    a->level_active = 0;
+    a->level_done = 1;
+    a->level_status = status;
+}
+
+/* accelerometer in sensor axes while levelling */
+static void level_step(ahrs_t* a, const float acc_s[3]) {
+    if (!a->stationary) {
+        level_finish(a, AHRS_ALIGN_NOT_ON_GROUND);
+        return;
+    }
+    for (int i = 0; i < 3; ++i) a->level_sum[i] += acc_s[i];
+    a->level_n++;
+    if (a->t - a->level_t0 < 2.0) return;
+    float f[3];
+    for (int i = 0; i < 3; ++i) f[i] = a->level_sum[i] / (float)a->level_n;
+    /* the board's own roll and pitch while the aircraft is level = installation offsets */
+    const float roll = atan2f(-f[1], -f[2]) * RAD2DEG;
+    const float pitch = atan2f(f[0], sqrtf(f[1] * f[1] + f[2] * f[2])) * RAD2DEG;
+    if (fabsf(roll) > 10.0f || fabsf(pitch) > 10.0f) {
+        level_finish(a, AHRS_ALIGN_OUT_OF_RANGE);
+        return;
+    }
+    const float rpy[3] = {roll, pitch, a->mount_rpy[2]};
+    ahrs_set_mount(a, rpy);
+    level_finish(a, AHRS_ALIGN_OK);
+}
+
+int ahrs_heading_align(ahrs_t* a, float ref) {
+    if (!a->aligned) return AHRS_ALIGN_NOT_READY;
+    if (!ahrs_on_ground(a)) return AHRS_ALIGN_NOT_ON_GROUND;
+    ahrs_out_t o;
+    ahrs_output(a, &o);
+    if (!(o.valid & AHRS_OUT_HEADING)) return AHRS_ALIGN_NOT_READY;
+    /* shown heading - reference = how far the board is turned to the right of the nose */
+    const float yaw = a->mount_rpy[2] + wrap_pi((o.heading_mag_deg - ref) * DEG2RAD) * RAD2DEG;
+    if (fabsf(yaw) > 30.0f) return AHRS_ALIGN_OUT_OF_RANGE;
+    const float rpy[3] = {a->mount_rpy[0], a->mount_rpy[1], yaw};
+    ahrs_set_mount(a, rpy);
+    return AHRS_ALIGN_OK;
+}
+
+void ahrs_imu(ahrs_t* a, const float gyro_s[3], const float acc_s[3], float dt) {
     a->t += dt;
+    if (a->level_active) level_step(a, acc_s);
+    float gyro[3], acc[3];
+    m3_mul_v(a->T, gyro_s, gyro);
+    m3_mul_v(a->T, acc_s, acc);
     if (!a->aligned) {
         for (int i = 0; i < 3; ++i) {
             a->acc_sum[i] += acc[i];
@@ -174,7 +269,8 @@ void ahrs_imu(ahrs_t* a, const float gyro[3], const float acc[3], float dt) {
         const float gn = v3_norm(gyro);
         if (gn > a->gyro_max) a->gyro_max = gn;
         a->align_n++;
-        if (a->t >= ALIGN_TIME_S && (a->have_mag || a->t >= 3.0 * ALIGN_TIME_S)) align(a);
+        const double ta = a->t - a->t_align_start;
+        if (ta >= ALIGN_TIME_S && (a->have_mag || ta >= 3.0 * ALIGN_TIME_S)) align(a);
         return;
     }
     eskf_t* f = &a->kf;
@@ -217,7 +313,8 @@ void ahrs_imu(ahrs_t* a, const float gyro[3], const float acc[3], float dt) {
 
 void ahrs_mag(ahrs_t* a, const float raw[3]) {
     if (magcal_add(&a->mc, raw)) a->magcal_changed = 1;
-    magcal_apply(&a->mc, raw, a->mag_cal);
+    magcal_apply(&a->mc, raw, a->mag_cal_s);
+    m3_mul_v(a->T, a->mag_cal_s, a->mag_cal);
     a->have_mag = 1;
     if (!a->aligned) return;
 
@@ -246,7 +343,10 @@ void ahrs_mag(ahrs_t* a, const float raw[3]) {
     if (a->gnss == GNSS_OK && a->t - a->t_mag_aided >= 1.0 && plausible && sqrtf(f->P[ES_TH + 2][ES_TH + 2]) < 2.0f * DEG2RAD &&
         v3_norm(a->gyro_c) < 0.3f && a->last_gs > 15.0f) {
         a->t_mag_aided = a->t;
-        if (magcal_aided_add(&a->mc, f->R, a->mag_cal)) a->magcal_changed = 1;
+        float Rs[3][3]; /* sensor -> NED */
+        for (int i = 0; i < 3; ++i)
+            for (int j = 0; j < 3; ++j) Rs[i][j] = f->R[i][0] * a->T[0][j] + f->R[i][1] * a->T[1][j] + f->R[i][2] * a->T[2][j];
+        if (magcal_aided_add(&a->mc, Rs, a->mag_cal_s)) a->magcal_changed = 1;
     }
 }
 

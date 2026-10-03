@@ -27,6 +27,13 @@ typedef struct {
     eskf_noise_t noise;
 } ahrs_config_t;
 
+/* Installation alignment (node services 100-102, see README) */
+#define AHRS_ALIGN_OK 0
+#define AHRS_ALIGN_NOT_ON_GROUND 1 /* not standing still on the ground */
+#define AHRS_ALIGN_OUT_OF_RANGE 2  /* offset beyond 10 deg (level) / 30 deg (heading) */
+#define AHRS_ALIGN_NOT_READY 3     /* filter not aligned or heading invalid */
+#define AHRS_ALIGN_BUSY 4          /* levelling already running */
+
 #define AHRS_OUT_ATTITUDE (1u << 0)
 #define AHRS_OUT_HEADING (1u << 1)
 #define AHRS_OUT_RATES (1u << 2)   /* body rates and lateral acceleration */
@@ -59,6 +66,18 @@ typedef struct {
     magcal_t mc;
     int aligned;
     double t;
+    double t_align_start;
+
+    /* installation: board orientation relative to the aircraft (roll, pitch, yaw), body = T * sensor */
+    float mount_rpy[3];
+    float T[3][3];
+    int mount_changed;
+
+    /* levelling in progress */
+    int level_active, level_status, level_done;
+    double level_t0;
+    float level_sum[3];
+    uint32_t level_n;
 
     /* alignment */
     float acc_sum[3], gyro_sum[3], gyro_max;
@@ -79,7 +98,8 @@ typedef struct {
     double t_pseudo;
 
     /* magnetometer */
-    float mag_cal[3];
+    float mag_cal[3];   /* calibrated, aircraft body axes */
+    float mag_cal_s[3]; /* calibrated, sensor axes (the calibration lives there) */
     float mag_norm_lpf, mag_dip_lpf;
     double t_mag_upd, t_mag_ok, t_mag_aided;
     int have_mag;
@@ -115,8 +135,8 @@ void ahrs_default_config(ahrs_config_t* c);
 void ahrs_init(ahrs_t* a, const ahrs_config_t* cfg);
 void ahrs_set_magcal(ahrs_t* a, const magcal_params_t* p);
 
-void ahrs_imu(ahrs_t* a, const float gyro[3], const float acc[3], float dt); /* rad/s, m/s^2 */
-void ahrs_mag(ahrs_t* a, const float raw_ut[3]);
+void ahrs_imu(ahrs_t* a, const float gyro[3], const float acc[3], float dt); /* sensor axes: rad/s, m/s^2 */
+void ahrs_mag(ahrs_t* a, const float raw_ut[3]); /* sensor axes */
 void ahrs_baro(ahrs_t* a, float p_pa);
 void ahrs_gnss(ahrs_t* a, const ubx_pvt_t* pvt);
 void ahrs_airspeed(ahrs_t* a, float ias_ms, float tas_ms);
@@ -126,5 +146,18 @@ void ahrs_declination(ahrs_t* a, float dec_deg);
 void ahrs_output(const ahrs_t* a, ahrs_out_t* o);
 /* Returns 1 once after the magnetometer calibration changed (to store it). */
 int ahrs_take_magcal_changed(ahrs_t* a);
+
+/* Standing still on the ground (GNSS slow, or not moved since power-up without GNSS). */
+int ahrs_on_ground(const ahrs_t* a);
+/* Installation offsets (deg); the filter re-aligns (about 1 s, outputs invalid meanwhile). */
+void ahrs_set_mount(ahrs_t* a, const float rpy_deg[3]);
+/* Levelling: the aircraft stands in its level reference attitude. Starts a 2 s average of the
+ * accelerometer; AHRS_ALIGN_OK when started. ahrs_level_poll() returns 1 when finished. */
+int ahrs_level_start(ahrs_t* a);
+int ahrs_level_poll(ahrs_t* a, int* status);
+/* Heading alignment: the aircraft stands on a known magnetic heading. */
+int ahrs_heading_align(ahrs_t* a, float ref_mag_deg);
+/* Returns 1 once after the installation offsets changed (to store them). */
+int ahrs_take_mount_changed(ahrs_t* a);
 
 #endif

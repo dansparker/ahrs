@@ -20,9 +20,11 @@ float randn(void) {
 
 void run_unit_tests(void);
 void run_sim_tests(void);
+void run_align_tests(void);
 
 int main(void) {
     run_unit_tests();
+    run_align_tests();
     run_sim_tests();
     printf("%d checks, %d failures\n", g_checks, g_failures);
     return g_failures ? 1 : 0;

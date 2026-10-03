@@ -1,6 +1,6 @@
 CC ?= gcc
 CFLAGS = -std=c11 -O2 -g -Wall -Wextra -Werror -Wshadow -fsanitize=address,undefined -fno-omit-frame-pointer
-SRC = test_main.c test_units.c test_sim.c \
+SRC = test_main.c test_units.c test_sim.c test_align.c \
       ../core/eskf.c ../core/magcal.c ../core/ahrs.c ../core/ubx.c ../core/canas.c ../core/can_out.c ../core/baro.c ../core/ms4525.c
 
 all: run

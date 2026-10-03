@@ -39,6 +39,14 @@ static void test_canas(void) {
     CHECK(canas_node_service(&tx, 128, req_us, 4, 1, 2, &r) == 1);
     CHECK(canas_node_service(&tx, 128, req_other, 4, 1, 2, &r) == 0);
     CHECK(canas_node_service(&tx, 300, req_all, 4, 1, 2, &r) == 0);
+    const uint8_t req_level[4] = {7, CANAS_NODATA, CANAS_SERVICE_ALIGN_LEVEL, 5};
+    CHECK(canas_node_service(&tx, 128, req_level, 4, 1, 2, &r) == 0); /* not IDS */
+    const uint8_t pl[4] = {0x00, 0xC8, 0xFE, 0xD4};                   /* +2.00, -3.00 deg */
+    canas_service_response(&tx, CANAS_SERVICE_ALIGN_LEVEL, 5, CANAS_SHORT2, pl, 4, &r);
+    CHECK(r.id == 129 && r.dlc == 8 && r.data[0] == 7 && r.data[1] == CANAS_SHORT2 && r.data[2] == 100 && r.data[3] == 5);
+    CHECK(r.data[4] == 0x00 && r.data[5] == 0xC8 && r.data[6] == 0xFE && r.data[7] == 0xD4);
+    canas_service_response(&tx, CANAS_SERVICE_ALIGN_RESET, 6, CANAS_UCHAR, pl, 1, &r);
+    CHECK(r.dlc == 5 && r.data[4] == 0x00);
 }
 
 static void test_can_out(void) {

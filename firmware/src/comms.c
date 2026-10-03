@@ -72,6 +72,21 @@ void HAL_CAN_TxMailbox0AbortCallback(CAN_HandleTypeDef* h) { (void)h; refill(); 
 void HAL_CAN_TxMailbox1AbortCallback(CAN_HandleTypeDef* h) { (void)h; refill(); }
 void HAL_CAN_TxMailbox2AbortCallback(CAN_HandleTypeDef* h) { (void)h; refill(); }
 
+static volatile service_req_t rx_req;
+static volatile int rx_req_new;
+
+int can_take_service_request(service_req_t* r) {
+    if (!rx_req_new) return 0;
+    __disable_irq();
+    r->service = rx_req.service;
+    r->msg_code = rx_req.msg_code;
+    r->type = rx_req.type;
+    for (int i = 0; i < 4; ++i) r->data[i] = rx_req.data[i];
+    rx_req_new = 0;
+    __enable_irq();
+    return 1;
+}
+
 static volatile float rx_variation;
 static volatile int rx_variation_new;
 
@@ -96,6 +111,16 @@ void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef* h) {
             rx_variation = canas_get_float(&f);
             rx_variation_new = 1;
         }
+        return;
+    }
+    /* alignment services: only when addressed to this node explicitly (no broadcast) */
+    if (rh.StdId == CANAS_ID_NODE_SERVICE_REQ && rh.DLC >= 4 && d[0] == g_canas.node_id &&
+        d[2] >= CANAS_SERVICE_ALIGN_LEVEL && d[2] <= CANAS_SERVICE_ALIGN_RESET) {
+        rx_req.service = d[2];
+        rx_req.msg_code = d[3];
+        rx_req.type = d[1];
+        for (int i = 0; i < 4; ++i) rx_req.data[i] = rh.DLC >= 8 ? d[4 + i] : 0;
+        rx_req_new = 1;
         return;
     }
     canas_frame_t reply;
@@ -159,7 +184,7 @@ void gnss_configure(void) {
 
 /* ---------------- calibration storage: flash sector 1 (0x08004000, 16 KB) ---------------- */
 #define STORE_ADDR 0x08004000u
-#define STORE_MAGIC 0x4D414732u /* "MAG2" */
+#define STORE_MAGIC 0x4D414733u /* "MAG3" */
 
 typedef struct {
     uint32_t magic;

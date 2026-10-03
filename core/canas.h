@@ -8,10 +8,18 @@
 
 #include <stdint.h>
 
+#define CANAS_NODATA 0u
 #define CANAS_FLOAT 2u
 #define CANAS_SHORT 6u
 #define CANAS_UCHAR 10u
+#define CANAS_SHORT2 12u
 #define CANAS_UCHAR4 16u
+
+/* user-defined node services (codes >= 100) on channel 0: installation alignment of the AHRS */
+#define CANAS_SERVICE_ALIGN_LEVEL 100u   /* request NODATA; response SHORT2 roll, pitch offset [0.01 deg] */
+#define CANAS_SERVICE_ALIGN_HEADING 101u /* request FLOAT magnetic heading [deg]; response FLOAT yaw offset */
+#define CANAS_SERVICE_ALIGN_RESET 102u   /* request NODATA; response UCHAR 0 */
+/* failed requests are answered with UCHAR status (AHRS_ALIGN_*) */
 
 #define CANAS_ID_NODE_SERVICE_REQ 128u
 #define CANAS_ID_NODE_SERVICE_RESP 129u
@@ -60,6 +68,10 @@ void canas_uchar4(canas_tx_t* tx, canas_frame_t* f, uint16_t id, const uint8_t v
 /* Answers the identification service (IDS) on 128 with a frame on 129; returns 1 if *reply is set. */
 int canas_node_service(const canas_tx_t* tx, uint16_t id, const uint8_t* data, uint8_t dlc, uint8_t hw_rev,
                        uint8_t sw_rev, canas_frame_t* reply);
+
+/* Node service response on 129: own node ID, data type, service code, message code of the request. */
+void canas_service_response(const canas_tx_t* tx, uint8_t service, uint8_t msg_code, uint8_t type,
+                            const uint8_t* payload, uint8_t n, canas_frame_t* f);
 
 /* --- decoding (tests, bus monitors) --- */
 float canas_get_float(const canas_frame_t* f);

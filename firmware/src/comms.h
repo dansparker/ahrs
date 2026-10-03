@@ -18,6 +18,13 @@ void gnss_uart_irq(void);
 int gnss_getc(uint8_t* c);
 void gnss_configure(void);
 
+/* Alignment request (node service 100-102) addressed to this node; returns 1 once per request. */
+typedef struct {
+    uint8_t service, msg_code, type;
+    uint8_t data[4];
+} service_req_t;
+int can_take_service_request(service_req_t* r);
+
 /* Magnetic variation received from the display (deg east); returns 1 once per new value. */
 int can_take_variation(float* deg);
 
@@ -26,6 +33,8 @@ typedef struct {
     magcal_params_t mag;
     float declination_deg;
     int32_t declination_valid;
+    float mount_rpy[3]; /* installation offsets (levelling, heading alignment), deg */
+    int32_t mount_valid;
 } store_data_t;
 int store_load(store_data_t* d);
 int store_save(const store_data_t* d);

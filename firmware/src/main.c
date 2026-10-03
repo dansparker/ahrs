@@ -24,6 +24,69 @@ canas_tx_t g_canas;
 static ahrs_t ahrs;
 static ubx_parser_t ubx;
 
+static void respond(const service_req_t* r, uint8_t type, const uint8_t* payload, uint8_t n) {
+    canas_frame_t f;
+    canas_service_response(&g_canas, r->service, r->msg_code, type, payload, n, &f);
+    can_send(&f);
+}
+
+static void respond_status(const service_req_t* r, int status) {
+    const uint8_t s = (uint8_t)status;
+    respond(r, CANAS_UCHAR, &s, 1);
+}
+
+static void put_short(uint8_t* p, float v) {
+    const int16_t s = (int16_t)lroundf(v);
+    p[0] = (uint8_t)((uint16_t)s >> 8);
+    p[1] = (uint8_t)s;
+}
+
+/* Installation alignment requested by the display (node services 100-102). */
+static service_req_t level_req;
+static int level_pending;
+
+static void handle_service(const service_req_t* r) {
+    if (r->service == CANAS_SERVICE_ALIGN_LEVEL) {
+        const int st = level_pending ? AHRS_ALIGN_BUSY : ahrs_level_start(&ahrs);
+        if (st != AHRS_ALIGN_OK) {
+            respond_status(r, st);
+        } else {
+            level_req = *r;
+            level_pending = 1; /* answered when the 2 s average is done */
+        }
+    } else if (r->service == CANAS_SERVICE_ALIGN_HEADING) {
+        canas_frame_t f = {0, 8, {0}};
+        memcpy(&f.data[4], r->data, 4);
+        const float ref = canas_get_float(&f);
+        const int st = (r->type == CANAS_FLOAT && ref >= 0.0f && ref <= 360.0f) ? ahrs_heading_align(&ahrs, ref)
+                                                                                 : AHRS_ALIGN_OUT_OF_RANGE;
+        if (st != AHRS_ALIGN_OK) {
+            respond_status(r, st);
+        } else {
+            canas_float(&g_canas, &f, 0, ahrs.mount_rpy[2]);
+            respond(r, CANAS_FLOAT, &f.data[4], 4);
+        }
+    } else if (r->service == CANAS_SERVICE_ALIGN_RESET) {
+        const float zero[3] = {0.0f, 0.0f, 0.0f};
+        ahrs_set_mount(&ahrs, zero);
+        respond_status(r, AHRS_ALIGN_OK);
+    }
+}
+
+static void poll_level(void) {
+    int st;
+    if (!level_pending || !ahrs_level_poll(&ahrs, &st)) return;
+    level_pending = 0;
+    if (st != AHRS_ALIGN_OK) {
+        respond_status(&level_req, st);
+        return;
+    }
+    uint8_t p[4];
+    put_short(&p[0], ahrs.mount_rpy[0] * 100.0f);
+    put_short(&p[2], ahrs.mount_rpy[1] * 100.0f);
+    respond(&level_req, CANAS_SHORT2, p, 4);
+}
+
 /* MS4525DO read-out (debugger / future use); deliberately not fed into the fusion */
 volatile float g_diff_pressure_pa, g_pitot_temp_c;
 volatile uint32_t g_diff_pressure_ok;
@@ -205,6 +268,10 @@ int main(void) {
     }
     ahrs_init(&ahrs, &cfg);
     if (have_store && stored.mag.valid) ahrs_set_magcal(&ahrs, &stored.mag);
+    if (have_store && stored.mount_valid) {
+        ahrs_set_mount(&ahrs, stored.mount_rpy);
+        (void)ahrs_take_mount_changed(&ahrs); /* loaded, nothing to store */
+    }
 
     uint32_t t_imu = micros(), t_fast = HAL_GetTick(), t_gnss_out = t_fast, t_pvt = t_fast;
     uint32_t imu_errors = 0, imu_n = 0, t_imu_ok = t_fast;
@@ -233,6 +300,9 @@ int main(void) {
             imu_errors = 0;
         }
         if (baro_poll(now_us, &p)) ahrs_baro(&ahrs, p);
+        service_req_t req;
+        if (can_take_service_request(&req)) handle_service(&req);
+        poll_level();
         float var;
         if (can_take_variation(&var)) {
             ahrs_declination(&ahrs, var);
@@ -290,10 +360,12 @@ int main(void) {
             /* store a new magnetometer calibration only while standing still on the ground:
              * erasing the flash sector blocks the CPU for up to 0.5 s */
             if (ahrs_take_magcal_changed(&ahrs)) save_pending = 1;
-            const int on_ground = ahrs.stationary && ((ahrs.gnss == GNSS_OK && ahrs.last_gs < 1.0f) || !ahrs.ever_moved);
-            if (save_pending && on_ground) {
+            if (ahrs_take_mount_changed(&ahrs)) save_pending = 1;
+            if (save_pending && ahrs_on_ground(&ahrs) && !level_pending) {
                 HAL_IWDG_Refresh(&hiwdg);
                 stored.mag = ahrs.mc.active;
+                for (int i = 0; i < 3; ++i) stored.mount_rpy[i] = ahrs.mount_rpy[i];
+                stored.mount_valid = 1;
                 if (ahrs.have_ext_dec) {
                     stored.declination_deg = ahrs.ext_dec * RAD2DEG;
                     stored.declination_valid = 1;

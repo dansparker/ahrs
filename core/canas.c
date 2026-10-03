@@ -71,6 +71,19 @@ int canas_node_service(const canas_tx_t* tx, uint16_t id, const uint8_t* data, u
     return 1;
 }
 
+void canas_service_response(const canas_tx_t* tx, uint8_t service, uint8_t msg_code, uint8_t type,
+                            const uint8_t* payload, uint8_t n, canas_frame_t* f) {
+    memset(f, 0, sizeof(*f));
+    if (n > 4) n = 4;
+    f->id = CANAS_ID_NODE_SERVICE_RESP;
+    f->dlc = (uint8_t)(4u + n);
+    f->data[0] = tx->node_id;
+    f->data[1] = type;
+    f->data[2] = service;
+    f->data[3] = msg_code;
+    if (n) memcpy(&f->data[4], payload, n);
+}
+
 float canas_get_float(const canas_frame_t* f) {
     uint32_t u = (uint32_t)f->data[4] << 24 | (uint32_t)f->data[5] << 16 | (uint32_t)f->data[6] << 8 | f->data[7];
     float v;
