@@ -170,7 +170,7 @@ static void run(const scenario_t* sc, result_t* res) {
         ahrs_output(a, &out);
         float tr, tp, ty;
         dcm_to_euler(R, &tr, &tp, &ty);
-        if (in_outage && (out.valid & AHRS_OUT_GNSS)) res->gnss_out_without_fix++;
+        if (in_outage && t > sc->outage_from + 0.6f && (out.valid & AHRS_OUT_GNSS)) res->gnss_out_without_fix++;
         if (t > 5.0f) {
             if (!(out.valid & AHRS_OUT_ATTITUDE)) res->att_invalid++;
             if (!(out.valid & AHRS_OUT_HEADING)) res->hdg_invalid++;

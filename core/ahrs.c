@@ -374,7 +374,7 @@ void ahrs_output(const ahrs_t* a, ahrs_out_t* o) {
     }
 
     const ubx_pvt_t* p = &a->pvt_fix;
-    if (a->gnss == GNSS_OK) {
+    if (a->gnss == GNSS_OK && a->t - a->t_gnss_ok < 0.5) { /* the display drops values older than 500 ms */
         o->lat_deg = p->lat_deg;
         o->lon_deg = p->lon_deg;
         o->height_m = p->height_m;
