@@ -40,8 +40,11 @@ tests/     Unit-Tests und Flugsimulation (läuft in der CI mit AddressSanitizer/
 * **Barometer**: Druckhöhe mit Bias-Zustand (Baro − GNSS-Höhe); daraus Höhe und Steigrate.
 * **Magnetometer**: nur als Kurs-Messung (verändert Roll/Pitch nicht), mit Plausibilitätsprüfung
   von Feldstärke und Inklination gegen Langzeitmittel und χ²-Gate (Störungen durch Funkgerät,
-  Pitot-Heizung usw. werden verworfen). Die **Missweisung** ist ein Filterzustand und wird mit GNSS
-  in Kurven geschätzt (Startwert `MAG_DECLINATION_DEG`); gesendet wird der **missweisende Kurs**.
+  Pitot-Heizung usw. werden verworfen). Gesendet wird der **missweisende Steuerkurs** (1069).
+* **Missweisung**: Das Filter rechnet intern geografisch (GNSS) und braucht sie daher. Sie kommt
+  vom **EFIS** (1121 aus dessen WMM, Node-ID `EFIS_NODE_ID`, open-efis `can.own_node_id`) – das
+  Modell wird nur dort auf der SD-Karte aktualisiert. Der letzte Wert wird im Flash gespeichert und
+  beim nächsten Start verwendet; ohne beides wird sie mit GNSS im Kurvenflug geschätzt.
 * **Stillstand** (ZUPT): ruhige Drehrate, ruhige und *richtungsstabile* Beschleunigung – eine
   Richtungsänderung ohne Drehung ist Linearbeschleunigung (Startlauf) und beendet den Stillstand.
 
@@ -96,8 +99,10 @@ liefert erwartungsgemäß keine Lösung; die Nachführung findet einen Rest-Offs
 | Rate | Identifier |
 |---|---|
 | 50 Hz | 311 Pitch, 312 Roll, 1069 Kurs (missweisend), 301 Querbeschleunigung, 303 Nickrate, 305 Gierrate, 322 Druckhöhe (1013,25), 314 Steigrate |
-| 10 Hz | 1036/1037 Lat/Lon, 1038 Höhe (Ellipsoid), 1039 Grundgeschwindigkeit, 1040 Track, 1048 Fix, 1800 Satelliten, 1121 Missweisung |
+| 10 Hz | 1036/1037 Lat/Lon, 1038 Höhe (Ellipsoid), 1039 Grundgeschwindigkeit, 1040 Track (geografisch), 1048 Fix, 1800 Satelliten |
 | 10 Hz | **1200 UTC** (UCHAR4: h, min, s, 0), **1201 Datum** (UCHAR4: Tag, Monat, Jahr % 100, Jahr / 100) – auch ohne Positionslösung, sobald der Empfänger eine gültige Zeit hat |
+
+**Empfangen:** 1121 Missweisung vom EFIS (nur von `EFIS_NODE_ID`), 128 Identifikationsanfrage.
 
 Werte ohne Gültigkeit werden nicht gesendet (OpenEFIS zeigt dann rotes X/Striche). Anfragen des
 Identifikationsdienstes (ID 128) werden auf ID 129 beantwortet.
