@@ -88,7 +88,7 @@ Unsinn. Deshalb zwei Verfahren nebeneinander:
 
 Getestet: Ellipsoid-Offset auf 0,02 µT genau, Feldbetrag danach auf 0,3 % konstant; ebener Flug
 liefert erwartungsgemäß keine Lösung; die Nachführung findet einen Rest-Offset von (6, −4) µT auf
-0,1 µT.
+0,15 µT.
 
 ## CAN-Bus (CANaerospace, Node-ID 7)
 
