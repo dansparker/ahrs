@@ -197,8 +197,9 @@ static void run(const scenario_t* sc, result_t* res) {
         if (k == steps) {
             res->dec_err = fabsf(a->kf.dec - DEC_TRUE) * RAD2DEG;
             const int secs = 14 * 3600 + (int)t;
-            res->time_ok = (out.valid & AHRS_OUT_TIME) && out.hour == secs / 3600 && out.min == secs / 60 % 60 &&
-                           abs(out.sec - secs % 60) <= 1 && out.year == 2026;
+            const int out_secs = out.hour * 3600 + out.min * 60 + out.sec; /* last PVT may be up to 0.1 s old */
+            res->time_ok = (out.valid & AHRS_OUT_TIME) && abs(out_secs - secs) <= 1 && out.year == 2026 &&
+                           out.month == 10 && out.day == 3;
         }
     }
     res->rms_tilt = (float)sqrt(sum_tilt2 / (double)(n_tilt ? n_tilt : 1));
