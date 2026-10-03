@@ -183,11 +183,11 @@ void ahrs_imu(ahrs_t* a, const float gyro[3], const float acc[3], float dt) {
     for (int i = 0; i < 3; ++i) a->rate_lpf[i] += k_rate * (a->gyro_c[i] - a->rate_lpf[i]);
     a->latg_lpf += k_latg * (a->acc_c[1] / GRAVITY - a->latg_lpf);
     a->gyro_act += k_act * (v3_norm(a->gyro_c) - a->gyro_act);
-    a->acc_act += k_act * (fabsf(v3_norm(a->acc_c) - GRAVITY) - a->acc_act);
+    a->acc_act += k_act * (fabsf(v3_norm(acc) - GRAVITY) - a->acc_act);
     /* Stationary: calm gyro and accelerometer, and the specific force keeps its direction.
      * A direction change without rotation is linear acceleration (e.g. take-off roll): moving. */
     const int calm = a->gyro_act < 0.03f && a->acc_act < 0.3f;
-    for (int i = 0; i < 3; ++i) a->acc_lpf[i] += k_act * (a->acc_c[i] - a->acc_lpf[i]);
+    for (int i = 0; i < 3; ++i) a->acc_lpf[i] += k_act * (acc[i] - a->acc_lpf[i]); /* raw: bias estimates move */
     const float fn = v3_norm(a->acc_lpf);
     if (calm && !a->stationary && fn > 1.0f) {
         for (int i = 0; i < 3; ++i) a->f_anchor[i] = a->acc_lpf[i] / fn;
