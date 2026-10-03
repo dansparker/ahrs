@@ -10,6 +10,8 @@
 #ifndef ESKF_H
 #define ESKF_H
 
+#include <stdint.h>
+
 #include "ahrs_math.h"
 
 #define ESKF_N 17
@@ -50,9 +52,11 @@ void eskf_predict(eskf_t* f, const float gyro[3], const float acc[3], float dt);
  */
 int eskf_update(eskf_t* f, float innov, const float H[ESKF_N], float R, float gate, float* nis);
 
-/* Schmidt ("consider") update: states >= first_consider are neither corrected nor learn from it.
- * Used for approximate pseudo measurements that must not bias the sensor error estimates. */
-int eskf_update_consider(eskf_t* f, float innov, const float H[ESKF_N], float R, float gate, int first_consider);
+/* Schmidt ("consider") update: states whose bit is set in `consider` are neither corrected nor
+ * learn from the measurement. Used for approximate pseudo measurements. */
+int eskf_update_consider(eskf_t* f, float innov, const float H[ESKF_N], float R, float gate, uint32_t consider);
+#define ESKF_BIT(i) (1u << (i))
+#define ESKF_CONSIDER_BIASES (0x7u << ES_BA | 0x7u << ES_BG | ESKF_BIT(ES_BB) | ESKF_BIT(ES_DEC))
 
 int eskf_update_pos(eskf_t* f, int axis, float z, float R, float gate);
 int eskf_update_vel(eskf_t* f, int axis, float z, float R, float gate);
@@ -61,7 +65,7 @@ int eskf_update_baro(eskf_t* f, float alt, float R, float gate);
 int eskf_update_mag_heading(eskf_t* f, float psi_m, float R, float gate);
 /* Body-frame component of the air-relative velocity R^T (v - wind) (pseudo measurement,
  * e.g. zero sideslip). wind may be NULL. */
-int eskf_update_body_vel(eskf_t* f, int axis, float z, float R, float gate, int first_consider, const float wind[3]);
+int eskf_update_body_vel(eskf_t* f, int axis, float z, float R, float gate, uint32_t consider, const float wind[3]);
 
 /* Re-initialise position/velocity (e.g. after a long GNSS outage). */
 void eskf_reset_pos(eskf_t* f, const float p[3], float sig);

@@ -22,6 +22,7 @@ typedef struct {
     float gnss_reset_s;      /* outage longer than this -> reset position/velocity on recovery */
     float mag_sigma_deg;     /* magnetic heading measurement noise */
     float mag_rate_hz;       /* magnetic heading updates per second */
+    float alpha0_deg;        /* typical cruise angle of attack until learned with GNSS */
     eskf_noise_t noise;
 } ahrs_config_t;
 

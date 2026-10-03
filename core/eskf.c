@@ -132,12 +132,12 @@ static void inject(eskf_t* f, const float dx[ESKF_N]) {
 }
 
 int eskf_update(eskf_t* f, float innov, const float H[ESKF_N], float R, float gate, float* nis) {
-    const int ok = eskf_update_consider(f, innov, H, R, gate, ESKF_N);
+    const int ok = eskf_update_consider(f, innov, H, R, gate, 0u);
     if (nis) *nis = f->last_nis;
     return ok;
 }
 
-int eskf_update_consider(eskf_t* f, float innov, const float H[ESKF_N], float R, float gate, int nc) {
+int eskf_update_consider(eskf_t* f, float innov, const float H[ESKF_N], float R, float gate, uint32_t cm) {
     float PHt[ESKF_N], dx[ESKF_N];
     float S = R;
     for (int i = 0; i < ESKF_N; ++i) {
@@ -152,9 +152,10 @@ int eskf_update_consider(eskf_t* f, float innov, const float H[ESKF_N], float R,
     f->last_nis = d2;
     if (gate > 0.0f && d2 > gate) return 0;
     for (int i = 0; i < ESKF_N; ++i) {
-        dx[i] = i < nc ? PHt[i] / S * innov : 0.0f;
+        const int ci = (cm >> i) & 1u;
+        dx[i] = ci ? 0.0f : PHt[i] / S * innov;
         for (int j = 0; j < ESKF_N; ++j)
-            if (i < nc || j < nc) f->P[i][j] -= PHt[i] * PHt[j] / S;
+            if (!ci || !((cm >> j) & 1u)) f->P[i][j] -= PHt[i] * PHt[j] / S;
     }
     symmetrize(f);
     inject(f, dx);
@@ -192,7 +193,7 @@ int eskf_update_mag_heading(eskf_t* f, float psi_m, float R, float gate) {
     return eskf_update(f, innov, H, R, gate, 0);
 }
 
-int eskf_update_body_vel(eskf_t* f, int axis, float z, float R, float gate, int nc, const float wind[3]) {
+int eskf_update_body_vel(eskf_t* f, int axis, float z, float R, float gate, uint32_t cm, const float wind[3]) {
     float vb[3], va[3];
     for (int i = 0; i < 3; ++i) va[i] = f->v[i] - (wind ? wind[i] : 0.0f);
     m3t_mul_v(f->R, va, vb);
@@ -201,7 +202,7 @@ int eskf_update_body_vel(eskf_t* f, int axis, float z, float R, float gate, int 
     /* d(vb)/d(theta) = [vb]x */
     const float vx[3][3] = {{0.0f, -vb[2], vb[1]}, {vb[2], 0.0f, -vb[0]}, {-vb[1], vb[0], 0.0f}};
     for (int j = 0; j < 3; ++j) H[ES_TH + j] = vx[axis][j];
-    return eskf_update_consider(f, z - vb[axis], H, R, gate, nc);
+    return eskf_update_consider(f, z - vb[axis], H, R, gate, cm);
 }
 
 static void reset_block(eskf_t* f, int base, int len, float sig) {

@@ -19,6 +19,7 @@ void ahrs_default_config(ahrs_config_t* c) {
     c->gnss_reset_s = 30.0f;
     c->mag_sigma_deg = 5.0f;
     c->mag_rate_hz = 10.0f;
+    c->alpha0_deg = 2.0f;
     /* LSM6DSOX class MEMS IMU, deliberately pessimistic for vibration */
     c->noise.acc_noise = 0.05f;
     c->noise.gyro_noise = 0.005f;
@@ -35,6 +36,7 @@ void ahrs_init(ahrs_t* a, const ahrs_config_t* cfg) {
     a->cfg = *cfg;
     magcal_init(&a->mc);
     a->gnss = GNSS_NONE;
+    a->alpha_est = cfg->alpha0_deg * DEG2RAD;
     a->wP[0][0] = sq(30.0f);
     a->wP[1][1] = a->wP[2][2] = sq(20.0f);
 }
@@ -132,7 +134,7 @@ static void pseudo_measurements(ahrs_t* a) {
     const int gnss_ok = a->gnss == GNSS_OK;
     const int zupt_ok = (gnss_ok && a->last_gs < 0.5f) || (!a->ever_moved && a->gnss == GNSS_NONE);
     if (a->stationary && zupt_ok) {
-        for (int i = 0; i < 3; ++i) eskf_update_body_vel(f, i, 0.0f, sq(0.1f), 0.0f, ESKF_N, 0);
+        for (int i = 0; i < 3; ++i) eskf_update_body_vel(f, i, 0.0f, sq(0.1f), 0.0f, 0u, 0);
         return;
     }
     if (gnss_ok || a->gnss == GNSS_COAST) return;
@@ -140,22 +142,24 @@ static void pseudo_measurements(ahrs_t* a) {
      * attack as learned before the outage). This lets the filter separate centripetal acceleration
      * from gravity in turns. Sensor biases are "consider" states here: the constraint is only
      * approximate and must not be learned as an accelerometer or gyro bias. */
+    /* heading stays with gyro + magnetometer: the velocity direction is not observed here */
+    const uint32_t cm = ESKF_CONSIDER_BIASES | ESKF_BIT(ES_TH + 2);
     const int wk = a->ever_fused && wind_known(a);
     const float w[3] = {wk ? a->wx[1] : 0.0f, wk ? a->wx[2] : 0.0f, 0.0f};
     float vb[3], va[3];
     for (int i = 0; i < 3; ++i) va[i] = f->v[i] - w[i];
     m3t_mul_v(f->R, va, vb);
-    eskf_update_body_vel(f, 1, 0.0f, sq(2.0f), 0.0f, ES_BA, w);
-    eskf_update_body_vel(f, 2, vb[0] * tanf(a->alpha_est), sq(2.0f), 0.0f, ES_BA, w);
+    eskf_update_body_vel(f, 1, 0.0f, sq(2.0f), 0.0f, cm, w);
+    eskf_update_body_vel(f, 2, vb[0] * tanf(a->alpha_est), sq(2.0f), 0.0f, cm, w);
     if (a->t - a->t_airspeed < AIRSPEED_TIMEOUT_S) {
-        eskf_update_body_vel(f, 0, a->tas, sq(3.0f), 0.0f, ES_BA, w);
+        eskf_update_body_vel(f, 0, a->tas, sq(3.0f), 0.0f, cm, w);
     } else if (wk && a->wP[0][0] < sq(3.0f)) {
-        eskf_update_body_vel(f, 0, a->wx[0], sq(4.0f), 0.0f, ES_BA, w);
+        eskf_update_body_vel(f, 0, a->wx[0], sq(4.0f), 0.0f, cm, w);
     } else if (a->ever_fused) {
-        eskf_update_body_vel(f, 0, a->last_gs, sq(15.0f), 0.0f, ES_BA, w);
+        eskf_update_body_vel(f, 0, a->last_gs, sq(15.0f), 0.0f, cm, w);
     } else {
         /* no speed reference at all: keep the velocity bounded (degraded, accelerometer-only tilt) */
-        eskf_update_body_vel(f, 0, 0.0f, sq(40.0f), 0.0f, ES_BA, w);
+        eskf_update_body_vel(f, 0, 0.0f, sq(40.0f), 0.0f, cm, w);
     }
 }
 
@@ -344,7 +348,7 @@ void ahrs_output(const ahrs_t* a, ahrs_out_t* o) {
     o->lateral_g = a->latg_lpf;
 
     const float sig_tilt = sqrtf(f->P[ES_TH][ES_TH] > f->P[ES_TH + 1][ES_TH + 1] ? f->P[ES_TH][ES_TH] : f->P[ES_TH + 1][ES_TH + 1]);
-    if (sig_tilt < 3.0f * DEG2RAD) o->valid |= AHRS_OUT_ATTITUDE | AHRS_OUT_RATES;
+    if (sig_tilt < 5.0f * DEG2RAD) o->valid |= AHRS_OUT_ATTITUDE | AHRS_OUT_RATES;
     const float var_hdg = f->P[ES_TH + 2][ES_TH + 2] + f->P[ES_DEC][ES_DEC] - 2.0f * f->P[ES_TH + 2][ES_DEC];
     const int mag_recent = a->t - a->t_mag_ok < MAG_TIMEOUT_S;
     if ((o->valid & AHRS_OUT_ATTITUDE) && var_hdg < sq(4.0f * DEG2RAD) &&
