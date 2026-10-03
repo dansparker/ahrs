@@ -72,6 +72,23 @@ GNSS-Ausfall 120 s mit Kurven):
 | nie GNSS, mit Fahrtmesser | 2,9° | 6,7° |
 | nie GNSS, ohne Fahrtmesser (Notbetrieb) | 7,0° | 17° |
 
+## Einbaukalibrierung
+
+Die Platine muss nur grob ausgerichtet sein (Achsrichtung per `IMU_MOUNT`/`MAG_MOUNT`, dann bis
+10° Neigung und 30° Verdrehung). Den Rest misst das AHRS auf Anforderung aus dem EFIS
+(open-efis: MENU → „AHRS alignment“) und speichert ihn im Flash:
+
+* **Nivellieren:** Flugzeug in Fluglage (Nivelliermarken laut Wägebericht), still am Boden. Das
+  AHRS mittelt 2 s die Beschleunigung; der gemessene Roll-/Nickwinkel wird zum Einbauversatz.
+  Ein konstanter Beschleunigungsmesser-Fehler wird dabei mit abgeglichen.
+* **Kursabgleich:** Flugzeug steht auf bekanntem missweisendem Kurs (Kompassrose, Pistenachse);
+  der eingegebene Kurs legt den Gierversatz fest.
+* **Zurücksetzen:** alle Versätze auf 0.
+
+Danach richtet sich das Filter neu aus (rund 1 s ungültig). Protokoll: CANaerospace-Node-Services
+100–102 auf ID 128/129, nur an die eigene Node-ID adressiert (Details in open-efis ADR 0002);
+abgelehnt wird, wenn das Flugzeug nicht still am Boden steht oder der Versatz zu groß ist.
+
 ## Magnetometer-Kalibrierung
 
 Zur Frage, ob es bessere Varianten als das Paper gibt (Cao/Xu/Xu, *Sensors* 2020, 20, 535):
@@ -102,7 +119,7 @@ liefert erwartungsgemäß keine Lösung; die Nachführung findet einen Rest-Offs
 | 10 Hz | 1036/1037 Lat/Lon, 1038 Höhe (Ellipsoid), 1039 Grundgeschwindigkeit, 1040 Track (geografisch), 1048 Fix, 1800 Satelliten |
 | 10 Hz | **1200 UTC** (UCHAR4: h, min, s, 0), **1201 Datum** (UCHAR4: Tag, Monat, Jahr % 100, Jahr / 100) – auch ohne Positionslösung, sobald der Empfänger eine gültige Zeit hat |
 
-**Empfangen:** 1121 Missweisung vom EFIS (nur von `EFIS_NODE_ID`), 128 Identifikationsanfrage.
+**Empfangen:** 1121 Missweisung vom EFIS (nur von `EFIS_NODE_ID`), 128 Identifikationsanfrage und Einbaukalibrierung (Services 100–102).
 
 Werte ohne Gültigkeit werden nicht gesendet (OpenEFIS zeigt dann rotes X/Striche). Anfragen des
 Identifikationsdienstes (ID 128) werden auf ID 129 beantwortet.
