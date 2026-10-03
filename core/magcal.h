@@ -42,6 +42,7 @@ typedef struct {
     float ring[32][3]; /* recent accepted raw samples for the residual check */
     uint32_t ring_n;
     float last_residual;
+    float dd[3][3]; /* sum of accepted unit directions d d^T: geometric spread */
 
     /* attitude-aided RLS: x = [B_ned(3), d_offset(3)] */
     float ax[6];

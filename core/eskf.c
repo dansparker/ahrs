@@ -120,6 +120,12 @@ static void inject(eskf_t* f, const float dx[ESKF_N]) {
 }
 
 int eskf_update(eskf_t* f, float innov, const float H[ESKF_N], float R, float gate, float* nis) {
+    const int ok = eskf_update_consider(f, innov, H, R, gate, ESKF_N);
+    if (nis) *nis = f->last_nis;
+    return ok;
+}
+
+int eskf_update_consider(eskf_t* f, float innov, const float H[ESKF_N], float R, float gate, int nc) {
     float PHt[ESKF_N], dx[ESKF_N];
     float S = R;
     for (int i = 0; i < ESKF_N; ++i) {
@@ -131,11 +137,12 @@ int eskf_update(eskf_t* f, float innov, const float H[ESKF_N], float R, float ga
     }
     if (!(S > 0.0f) || !isfinite(innov)) return 0;
     const float d2 = innov * innov / S;
-    if (nis) *nis = d2;
+    f->last_nis = d2;
     if (gate > 0.0f && d2 > gate) return 0;
     for (int i = 0; i < ESKF_N; ++i) {
-        dx[i] = PHt[i] / S * innov;
-        for (int j = 0; j < ESKF_N; ++j) f->P[i][j] -= PHt[i] * PHt[j] / S;
+        dx[i] = i < nc ? PHt[i] / S * innov : 0.0f;
+        for (int j = 0; j < ESKF_N; ++j)
+            if (i < nc || j < nc) f->P[i][j] -= PHt[i] * PHt[j] / S;
     }
     symmetrize(f);
     inject(f, dx);
@@ -173,7 +180,7 @@ int eskf_update_mag_heading(eskf_t* f, float psi_m, float R, float gate) {
     return eskf_update(f, innov, H, R, gate, 0);
 }
 
-int eskf_update_body_vel(eskf_t* f, int axis, float z, float R, float gate) {
+int eskf_update_body_vel(eskf_t* f, int axis, float z, float R, float gate, int nc) {
     float vb[3];
     m3t_mul_v(f->R, f->v, vb);
     float H[ESKF_N] = {0};
@@ -181,7 +188,7 @@ int eskf_update_body_vel(eskf_t* f, int axis, float z, float R, float gate) {
     /* d(vb)/d(theta) = [vb]x */
     const float vx[3][3] = {{0.0f, -vb[2], vb[1]}, {vb[2], 0.0f, -vb[0]}, {-vb[1], vb[0], 0.0f}};
     for (int j = 0; j < 3; ++j) H[ES_TH + j] = vx[axis][j];
-    return eskf_update(f, z - vb[axis], H, R, gate, 0);
+    return eskf_update_consider(f, z - vb[axis], H, R, gate, nc);
 }
 
 static void reset_block(eskf_t* f, int base, int len, float sig) {

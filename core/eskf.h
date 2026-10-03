@@ -35,6 +35,7 @@ typedef struct {
     float P[ESKF_N][ESKF_N];
     eskf_noise_t n;
     float R[3][3]; /* cached DCM of q */
+    float last_nis;
 } eskf_t;
 
 void eskf_init(eskf_t* f, const eskf_noise_t* n, quat_t q0, float sig_tilt, float sig_yaw, float dec0, float sig_dec);
@@ -49,13 +50,17 @@ void eskf_predict(eskf_t* f, const float gyro[3], const float acc[3], float dt);
  */
 int eskf_update(eskf_t* f, float innov, const float H[ESKF_N], float R, float gate, float* nis);
 
+/* Schmidt ("consider") update: states >= first_consider are neither corrected nor learn from it.
+ * Used for approximate pseudo measurements that must not bias the sensor error estimates. */
+int eskf_update_consider(eskf_t* f, float innov, const float H[ESKF_N], float R, float gate, int first_consider);
+
 int eskf_update_pos(eskf_t* f, int axis, float z, float R, float gate);
 int eskf_update_vel(eskf_t* f, int axis, float z, float R, float gate);
 int eskf_update_baro(eskf_t* f, float alt, float R, float gate);
 /* Magnetic heading measurement psi_m (rad): h(x) = yaw(q) - dec. */
 int eskf_update_mag_heading(eskf_t* f, float psi_m, float R, float gate);
 /* Body-frame velocity component (pseudo measurement, e.g. zero lateral velocity). */
-int eskf_update_body_vel(eskf_t* f, int axis, float z, float R, float gate);
+int eskf_update_body_vel(eskf_t* f, int axis, float z, float R, float gate, int first_consider);
 
 /* Re-initialise position/velocity (e.g. after a long GNSS outage). */
 void eskf_reset_pos(eskf_t* f, const float p[3], float sig);

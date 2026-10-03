@@ -186,6 +186,11 @@ static void run(const scenario_t* sc, result_t* res) {
                 res->max_hdg = e_hdg;
                 res->t_max_hdg = t;
             }
+            if (!sc->use_gnss && t > 58.0f && t < 95.0f && k % (long)FS == 0)
+                printf("    t=%3.0f r %6.1f p %5.1f v %6.1f %6.1f %6.1f bg %5.2f %5.2f %5.2f ba %5.2f %5.2f %5.2f st %d mv %d Pv %.1f\n",
+                       t, out.roll_deg, out.pitch_deg, a->kf.v[0], a->kf.v[1], a->kf.v[2], a->kf.bg[0] * RAD2DEG,
+                       a->kf.bg[1] * RAD2DEG, a->kf.bg[2] * RAD2DEG, a->kf.ba[0], a->kf.ba[1], a->kf.ba[2], a->stationary,
+                       a->ever_moved, sqrtf(a->kf.P[ES_V][ES_V]));
             if (k % (long)(30 * FS) == 0)
                 printf("    t=%3.0f roll %6.2f/%6.2f pitch %5.2f/%5.2f hdg %6.2f/%6.2f gnss %d stat %d\n", t, out.roll_deg,
                        tr * RAD2DEG, out.pitch_deg, tp * RAD2DEG, out.heading_mag_deg, wrap_360((ty - DEC_TRUE) * RAD2DEG),

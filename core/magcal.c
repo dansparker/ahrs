@@ -185,10 +185,17 @@ int magcal_add(magcal_t* c, const float raw[3]) {
     memcpy(c->ring[c->ring_n % 32], raw, sizeof(c->ring[0]));
     c->ring_n++;
     c->n_used++;
+    for (int i = 0; i < 3; ++i)
+        for (int k = 0; k < 3; ++k) c->dd[i][k] += d[i] * d[k] / (nd * nd);
     rls9(c, raw);
 
     if (++c->n_since_solve < 20 || magcal_covered_bins(c) < c->min_bins) return 0;
     c->n_since_solve = 0;
+    /* all three axes must be excited: a ring of samples (level flight) fits any ellipsoid */
+    float ev[3], EV[3][3];
+    sym3_eig(c->dd, ev, EV);
+    const float emin = fminf(ev[0], fminf(ev[1], ev[2]));
+    if (emin < 0.12f * (float)c->n_used) return 0;
     magcal_params_t cand;
     if (!magcal_solve(c->th, MAGCAL_SCALE, &cand)) return 0;
     c->last_residual = residual(c, &cand);

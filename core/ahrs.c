@@ -90,18 +90,20 @@ static void pseudo_measurements(ahrs_t* a) {
     const int gnss_ok = a->gnss == GNSS_OK;
     const int zupt_ok = (gnss_ok && a->last_gs < 0.5f) || (!a->ever_moved && a->gnss == GNSS_NONE);
     if (a->stationary && zupt_ok) {
-        for (int i = 0; i < 3; ++i) eskf_update_body_vel(f, i, 0.0f, sq(0.1f), 0.0f);
+        for (int i = 0; i < 3; ++i) eskf_update_body_vel(f, i, 0.0f, sq(0.1f), 0.0f, ESKF_N);
         return;
     }
     if (gnss_ok || a->gnss == GNSS_COAST) return;
     /* GNSS denied: the velocity is aligned with the body x axis (no sideslip, small alpha).
      * This lets the filter separate centripetal acceleration from gravity in turns. */
-    eskf_update_body_vel(f, 1, 0.0f, sq(2.0f), 0.0f);
-    eskf_update_body_vel(f, 2, 0.0f, sq(3.0f), 0.0f);
+    /* Sensor biases are "consider" states here: the constraint is only approximate (angle of
+     * attack, sideslip, wind) and must not be learned as an accelerometer or gyro bias. */
+    eskf_update_body_vel(f, 1, 0.0f, sq(2.0f), 0.0f, ES_BA);
+    eskf_update_body_vel(f, 2, 0.0f, sq(4.0f), 0.0f, ES_BA);
     if (a->t - a->t_airspeed < AIRSPEED_TIMEOUT_S) {
-        eskf_update_body_vel(f, 0, a->tas, sq(3.0f), 0.0f);
+        eskf_update_body_vel(f, 0, a->tas, sq(3.0f), 0.0f, ES_BA);
     } else if (a->ever_fused) {
-        eskf_update_body_vel(f, 0, a->last_gs, sq(15.0f), 0.0f);
+        eskf_update_body_vel(f, 0, a->last_gs, sq(15.0f), 0.0f, ES_BA);
     }
 }
 
