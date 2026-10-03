@@ -187,8 +187,7 @@ static void run(const scenario_t* sc, result_t* res) {
                 res->t_max_hdg = t;
             }
             if (k % (long)(30 * FS) == 0)
-                printf("    t=%3.0f roll %6.2f/%6.2f pitch %5.2f/%5.2f hdg %6.2f/%6.2f gnss %d stat %d
-", t, out.roll_deg,
+                printf("    t=%3.0f roll %6.2f/%6.2f pitch %5.2f/%5.2f hdg %6.2f/%6.2f gnss %d stat %d\n", t, out.roll_deg,
                        tr * RAD2DEG, out.pitch_deg, tp * RAD2DEG, out.heading_mag_deg, wrap_360((ty - DEC_TRUE) * RAD2DEG),
                        out.gnss_state, a->stationary);
             if (t > 110.0f && t < 150.0f && (out.valid & AHRS_OUT_CLIMB))
@@ -207,8 +206,7 @@ static void run(const scenario_t* sc, result_t* res) {
         }
     }
     res->rms_tilt = (float)sqrt(sum_tilt2 / (double)(n_tilt ? n_tilt : 1));
-    printf("  max tilt at t=%.1f, max heading at t=%.1f
-", res->t_max_tilt, res->t_max_hdg);
+    printf("  max tilt at t=%.1f, max heading at t=%.1f\n", res->t_max_tilt, res->t_max_hdg);
     printf("  tilt max %.2f rms %.2f (outage max %.2f) deg, mag heading max %.2f deg, climb err %.2f m/s, "
            "dec err %.2f deg, invalid att/hdg %d/%d, gyro bias est %.3f %.3f %.3f deg/s\n",
            res->max_tilt, res->rms_tilt, res->max_tilt_outage, res->max_hdg, res->max_climb_err, res->dec_err,

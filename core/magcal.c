@@ -98,7 +98,7 @@ int magcal_solve(const double th[9], float scale, magcal_params_t* out) {
                            {(float)th[2], (float)th[0], (float)th[4]},
                            {(float)th[3], (float)th[4], (float)th[1]}};
     const float g[3] = {(float)th[5], (float)th[6], (float)th[7]};
-    const float j = (float)th[8];
+    const float jc = (float)th[8];
     float e[3], V[3][3];
     sym3_eig(A, e, V);
     for (int i = 0; i < 3; ++i)
@@ -111,7 +111,7 @@ int magcal_solve(const double th[9], float scale, magcal_params_t* out) {
     }
     float Ao[3];
     m3_mul_v(A, o, Ao);
-    const float kk = v3_dot(o, Ao) - j;
+    const float kk = v3_dot(o, Ao) - jc;
     if (!(kk > 1e-6f)) return 0;
     float s[3], emax = 0.0f, emin = 1e30f;
     for (int i = 0; i < 3; ++i) {
