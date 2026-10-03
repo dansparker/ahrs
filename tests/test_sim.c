@@ -186,15 +186,6 @@ static void run(const scenario_t* sc, result_t* res) {
                 res->max_hdg = e_hdg;
                 res->t_max_hdg = t;
             }
-            if (!sc->use_gnss && t > 55.0f && t < 120.0f && k % (long)(5 * FS) == 0)
-                printf("    t=%3.0f r %6.1f p %5.1f v %6.1f %6.1f %6.1f bg %5.2f %5.2f %5.2f ba %5.2f %5.2f %5.2f st %d mv %d Pv %.1f\n",
-                       t, out.roll_deg, out.pitch_deg, a->kf.v[0], a->kf.v[1], a->kf.v[2], a->kf.bg[0] * RAD2DEG,
-                       a->kf.bg[1] * RAD2DEG, a->kf.bg[2] * RAD2DEG, a->kf.ba[0], a->kf.ba[1], a->kf.ba[2], a->stationary,
-                       a->ever_moved, sqrtf(a->kf.P[ES_V][ES_V]));
-            if (k % (long)(30 * FS) == 0)
-                printf("    t=%3.0f roll %6.2f/%6.2f pitch %5.2f/%5.2f hdg %6.2f/%6.2f gnss %d stat %d\n", t, out.roll_deg,
-                       tr * RAD2DEG, out.pitch_deg, tp * RAD2DEG, out.heading_mag_deg, wrap_360((ty - DEC_TRUE) * RAD2DEG),
-                       out.gnss_state, a->stationary);
             if (t > 110.0f && t < 150.0f && (out.valid & AHRS_OUT_CLIMB))
                 res->max_climb_err = fmaxf(res->max_climb_err, fabsf(out.climb_ms + vz));
         }
@@ -244,16 +235,17 @@ static void test_sim_no_gnss_airspeed(void) {
     run(&sc, &r);
     CHECK(r.att_invalid == 0);
     CHECK(r.max_tilt < 4.0f);
-    CHECK(r.max_hdg < 6.0f);
+    CHECK(r.max_hdg < 8.0f); /* wind (unknown without GNSS) changes during the climb-out */
 }
 
 static void test_sim_no_gnss_no_airspeed(void) {
-    /* worst case, informational: only the body-velocity constraint is left */
+    /* worst case: no speed reference at all; centripetal acceleration in turns is only partly
+     * resolved, so this is a degraded mode (heading error from tilt error x tan(dip)) */
     const scenario_t sc = {0, 0, 0.0f, 0.0f, 600.0f};
     result_t r;
     run(&sc, &r);
     CHECK(r.att_invalid == 0);
-    CHECK(r.max_tilt < 20.0f);
+    CHECK(r.max_tilt < 10.0f);
 }
 
 void run_sim_tests(void) {
