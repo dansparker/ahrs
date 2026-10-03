@@ -1,0 +1,26 @@
+name: CI
+on: [push, pull_request]
+jobs:
+  host-tests:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unit tests and flight simulation
+        run: make -C tests
+  firmware:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: sudo apt-get update && sudo apt-get install -y gcc-arm-none-eabi libnewlib-arm-none-eabi
+      - name: ST drivers
+        run: sh firmware/fetch_drivers.sh
+      - name: Build
+        run: make -C firmware -j4
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ahrs-firmware
+          path: |
+            firmware/build/ahrs.elf
+            firmware/build/ahrs.bin
+            firmware/build/ahrs.hex
