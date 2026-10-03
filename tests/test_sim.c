@@ -186,14 +186,7 @@ static void run(const scenario_t* sc, result_t* res) {
                 res->max_hdg = e_hdg;
                 res->t_max_hdg = t;
             }
-            if (!sc->use_gnss && !sc->use_airspeed && t > 7.0f && t < 13.0f && k % (long)(FS / 4) == 0) {
-                const float(*P)[ESKF_N] = (const float(*)[ESKF_N])a->kf.P;
-                printf("    t=%5.2f r %6.2f p %6.2f sth %.3f %.3f %.3f sba %.3f %.3f corr(thy,bax) %.4f sdec %.2f nis %.1f magrej %u bb %.2f\n",
-                       t, out.roll_deg, out.pitch_deg, sqrtf(P[6][6]) * RAD2DEG, sqrtf(P[7][7]) * RAD2DEG,
-                       sqrtf(P[8][8]) * RAD2DEG, sqrtf(P[9][9]), sqrtf(P[10][10]), P[7][9] / sqrtf(P[7][7] * P[9][9]),
-                       sqrtf(P[16][16]) * RAD2DEG, a->kf.last_nis, (unsigned)a->mag_rejects, a->kf.bbaro);
-            }
-            if (!sc->use_gnss && t < 95.0f && k % (long)(4 * FS) == 0)
+            if (!sc->use_gnss && t > 55.0f && t < 120.0f && k % (long)(5 * FS) == 0)
                 printf("    t=%3.0f r %6.1f p %5.1f v %6.1f %6.1f %6.1f bg %5.2f %5.2f %5.2f ba %5.2f %5.2f %5.2f st %d mv %d Pv %.1f\n",
                        t, out.roll_deg, out.pitch_deg, a->kf.v[0], a->kf.v[1], a->kf.v[2], a->kf.bg[0] * RAD2DEG,
                        a->kf.bg[1] * RAD2DEG, a->kf.bg[2] * RAD2DEG, a->kf.ba[0], a->kf.ba[1], a->kf.ba[2], a->stationary,

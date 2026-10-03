@@ -32,7 +32,9 @@ void eskf_init(eskf_t* f, const eskf_noise_t* n, quat_t q0, float sig_tilt, floa
     f->P[ES_TH + 0][ES_TH + 0] = sq(sig_tilt);
     f->P[ES_TH + 1][ES_TH + 1] = sq(sig_tilt);
     f->P[ES_TH + 2][ES_TH + 2] = sq(sig_yaw);
-    f->P[ES_BB][ES_BB] = sq(50.0f);
+    /* small on purpose: without GNSS bbaro and p_d are only observable as a difference, and a large
+     * common variance would make P ill-conditioned in single precision (reset at the first fix) */
+    f->P[ES_BB][ES_BB] = sq(1.0f);
     f->P[ES_DEC][ES_DEC] = sq(sig_dec);
 }
 
@@ -103,6 +105,16 @@ void eskf_predict(eskf_t* f, const float gyro[3], const float acc[3], float dt) 
     }
     f->P[ES_BB][ES_BB] += sq(n->baro_bias_rw) * dt;
     f->P[ES_DEC][ES_DEC] += sq(n->dec_rw) * dt;
+    /* bound the variance of unobserved states (horizontal position without GNSS) */
+    for (int i = ES_P; i < ES_P + 2; ++i) {
+        if (f->P[i][i] > 1e8f) {
+            const float k = sqrtf(1e8f / f->P[i][i]);
+            for (int j = 0; j < ESKF_N; ++j) {
+                f->P[i][j] *= k;
+                f->P[j][i] *= k;
+            }
+        }
+    }
     symmetrize(f);
 }
 
