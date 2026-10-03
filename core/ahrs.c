@@ -35,6 +35,8 @@ void ahrs_init(ahrs_t* a, const ahrs_config_t* cfg) {
     a->cfg = *cfg;
     magcal_init(&a->mc);
     a->gnss = GNSS_NONE;
+    a->wP[0][0] = sq(30.0f);
+    a->wP[1][1] = a->wP[2][2] = sq(20.0f);
 }
 
 void ahrs_set_magcal(ahrs_t* a, const magcal_params_t* p) { magcal_set(&a->mc, p); }
@@ -85,25 +87,75 @@ static void align(ahrs_t* a) {
     a->aligned = 1;
 }
 
+static int wind_known(const ahrs_t* a) { return a->wP[1][1] < sq(3.0f) && a->wP[2][2] < sq(3.0f); }
+
+/* Wind triangle: v_gnss = Va (cos psi, sin psi) + w (zero sideslip). Observable in turns. */
+static void wind_update(ahrs_t* a, const float vel[3]) {
+    const float psi = eskf_yaw(&a->kf);
+    const float h[2][3] = {{cosf(psi), 1.0f, 0.0f}, {sinf(psi), 0.0f, 1.0f}};
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j) a->wP[i][j] /= 0.995f;
+    for (int r = 0; r < 2; ++r) {
+        float Ph[3], den = sq(0.5f), pred = 0.0f;
+        for (int i = 0; i < 3; ++i) {
+            Ph[i] = a->wP[i][0] * h[r][0] + a->wP[i][1] * h[r][1] + a->wP[i][2] * h[r][2];
+            den += h[r][i] * Ph[i];
+            pred += h[r][i] * a->wx[i];
+        }
+        const float e = vel[r] - pred;
+        for (int i = 0; i < 3; ++i) {
+            a->wx[i] += Ph[i] / den * e;
+            for (int j = 0; j < 3; ++j) a->wP[i][j] -= Ph[i] * Ph[j] / den;
+        }
+    }
+    for (int i = 0; i < 3; ++i) { /* forgetting must not inflate unobservable directions without bound */
+        const float lim = sq(i == 0 ? 30.0f : 20.0f);
+        if (a->wP[i][i] > lim) {
+            const float k = sqrtf(lim / a->wP[i][i]);
+            for (int j = 0; j < 3; ++j) {
+                a->wP[i][j] *= k;
+                a->wP[j][i] *= k;
+            }
+        }
+    }
+    if (wind_known(a)) {
+        const float w[3] = {a->wx[1], a->wx[2], 0.0f};
+        float va[3], vb[3];
+        for (int i = 0; i < 3; ++i) va[i] = a->kf.v[i] - w[i];
+        m3t_mul_v(a->kf.R, va, vb);
+        if (vb[0] > 15.0f) a->alpha_est += 0.01f * (atan2f(vb[2], vb[0]) - a->alpha_est);
+    }
+}
+
 static void pseudo_measurements(ahrs_t* a) {
     eskf_t* f = &a->kf;
     const int gnss_ok = a->gnss == GNSS_OK;
     const int zupt_ok = (gnss_ok && a->last_gs < 0.5f) || (!a->ever_moved && a->gnss == GNSS_NONE);
     if (a->stationary && zupt_ok) {
-        for (int i = 0; i < 3; ++i) eskf_update_body_vel(f, i, 0.0f, sq(0.1f), 0.0f, ESKF_N);
+        for (int i = 0; i < 3; ++i) eskf_update_body_vel(f, i, 0.0f, sq(0.1f), 0.0f, ESKF_N, 0);
         return;
     }
     if (gnss_ok || a->gnss == GNSS_COAST) return;
-    /* GNSS denied: the velocity is aligned with the body x axis (no sideslip, small alpha).
-     * This lets the filter separate centripetal acceleration from gravity in turns. */
-    /* Sensor biases are "consider" states here: the constraint is only approximate (angle of
-     * attack, sideslip, wind) and must not be learned as an accelerometer or gyro bias. */
-    eskf_update_body_vel(f, 1, 0.0f, sq(2.0f), 0.0f, ES_BA);
-    eskf_update_body_vel(f, 2, 0.0f, sq(4.0f), 0.0f, ES_BA);
+    /* GNSS denied: the air-relative velocity lies along the body x axis (no sideslip, angle of
+     * attack as learned before the outage). This lets the filter separate centripetal acceleration
+     * from gravity in turns. Sensor biases are "consider" states here: the constraint is only
+     * approximate and must not be learned as an accelerometer or gyro bias. */
+    const int wk = a->ever_fused && wind_known(a);
+    const float w[3] = {wk ? a->wx[1] : 0.0f, wk ? a->wx[2] : 0.0f, 0.0f};
+    float vb[3], va[3];
+    for (int i = 0; i < 3; ++i) va[i] = f->v[i] - w[i];
+    m3t_mul_v(f->R, va, vb);
+    eskf_update_body_vel(f, 1, 0.0f, sq(2.0f), 0.0f, ES_BA, w);
+    eskf_update_body_vel(f, 2, vb[0] * tanf(a->alpha_est), sq(2.0f), 0.0f, ES_BA, w);
     if (a->t - a->t_airspeed < AIRSPEED_TIMEOUT_S) {
-        eskf_update_body_vel(f, 0, a->tas, sq(3.0f), 0.0f, ES_BA);
+        eskf_update_body_vel(f, 0, a->tas, sq(3.0f), 0.0f, ES_BA, w);
+    } else if (wk && a->wP[0][0] < sq(3.0f)) {
+        eskf_update_body_vel(f, 0, a->wx[0], sq(4.0f), 0.0f, ES_BA, w);
     } else if (a->ever_fused) {
-        eskf_update_body_vel(f, 0, a->last_gs, sq(15.0f), 0.0f, ES_BA);
+        eskf_update_body_vel(f, 0, a->last_gs, sq(15.0f), 0.0f, ES_BA, w);
+    } else {
+        /* no speed reference at all: keep the velocity bounded (degraded, accelerometer-only tilt) */
+        eskf_update_body_vel(f, 0, 0.0f, sq(40.0f), 0.0f, ES_BA, w);
     }
 }
 
@@ -135,12 +187,13 @@ void ahrs_imu(ahrs_t* a, const float gyro[3], const float acc[3], float dt) {
     /* Stationary: calm gyro and accelerometer, and the specific force keeps its direction.
      * A direction change without rotation is linear acceleration (e.g. take-off roll): moving. */
     const int calm = a->gyro_act < 0.03f && a->acc_act < 0.3f;
-    const float fn = v3_norm(a->acc_c);
+    for (int i = 0; i < 3; ++i) a->acc_lpf[i] += k_act * (a->acc_c[i] - a->acc_lpf[i]);
+    const float fn = v3_norm(a->acc_lpf);
     if (calm && !a->stationary && fn > 1.0f) {
-        for (int i = 0; i < 3; ++i) a->f_anchor[i] = a->acc_c[i] / fn;
+        for (int i = 0; i < 3; ++i) a->f_anchor[i] = a->acc_lpf[i] / fn;
         a->stationary = 1;
     } else if (a->stationary) {
-        const float c = fn > 1.0f ? v3_dot(a->acc_c, a->f_anchor) / fn : 0.0f;
+        const float c = fn > 1.0f ? v3_dot(a->acc_lpf, a->f_anchor) / fn : 0.0f;
         if (!calm || c < 0.99985f) { /* > 1 deg */
             if (calm) a->ever_moved = 1;
             a->stationary = 0;
@@ -253,6 +306,11 @@ void ahrs_gnss(ahrs_t* a, const ubx_pvt_t* p) {
         f->P[ES_P + 2][ES_P + 2] = sv * sv;
         eskf_reset_vel(f, p->vel_ned, 2.0f * ss);
         if (a->have_baro) eskf_reset_baro_bias(f, a->baro_alt - p->height_m, 10.0f);
+        if (a->ever_fused) { /* after an outage the tilt may carry pseudo-measurement errors: let GNSS fix
+                              * the attitude rather than the accelerometer bias */
+            f->P[ES_TH][ES_TH] += sq(2.0f * DEG2RAD);
+            f->P[ES_TH + 1][ES_TH + 1] += sq(2.0f * DEG2RAD);
+        }
         a->gnss_rejects = 0;
         a->ever_fused = 1;
     } else {
@@ -265,6 +323,7 @@ void ahrs_gnss(ahrs_t* a, const ubx_pvt_t* p) {
     }
     a->last_gs = p->g_speed_ms;
     if (p->g_speed_ms > 10.0f) a->ever_moved = 1;
+    if (p->g_speed_ms > 15.0f) wind_update(a, p->vel_ned);
     a->t_gnss_ok = a->t;
     a->gnss = GNSS_OK;
 }

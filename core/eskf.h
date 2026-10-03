@@ -59,8 +59,9 @@ int eskf_update_vel(eskf_t* f, int axis, float z, float R, float gate);
 int eskf_update_baro(eskf_t* f, float alt, float R, float gate);
 /* Magnetic heading measurement psi_m (rad): h(x) = yaw(q) - dec. */
 int eskf_update_mag_heading(eskf_t* f, float psi_m, float R, float gate);
-/* Body-frame velocity component (pseudo measurement, e.g. zero lateral velocity). */
-int eskf_update_body_vel(eskf_t* f, int axis, float z, float R, float gate, int first_consider);
+/* Body-frame component of the air-relative velocity R^T (v - wind) (pseudo measurement,
+ * e.g. zero sideslip). wind may be NULL. */
+int eskf_update_body_vel(eskf_t* f, int axis, float z, float R, float gate, int first_consider, const float wind[3]);
 
 /* Re-initialise position/velocity (e.g. after a long GNSS outage). */
 void eskf_reset_pos(eskf_t* f, const float p[3], float sig);

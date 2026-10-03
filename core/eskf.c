@@ -180,9 +180,10 @@ int eskf_update_mag_heading(eskf_t* f, float psi_m, float R, float gate) {
     return eskf_update(f, innov, H, R, gate, 0);
 }
 
-int eskf_update_body_vel(eskf_t* f, int axis, float z, float R, float gate, int nc) {
-    float vb[3];
-    m3t_mul_v(f->R, f->v, vb);
+int eskf_update_body_vel(eskf_t* f, int axis, float z, float R, float gate, int nc, const float wind[3]) {
+    float vb[3], va[3];
+    for (int i = 0; i < 3; ++i) va[i] = f->v[i] - (wind ? wind[i] : 0.0f);
+    m3t_mul_v(f->R, va, vb);
     float H[ESKF_N] = {0};
     for (int j = 0; j < 3; ++j) H[ES_V + j] = f->R[j][axis];
     /* d(vb)/d(theta) = [vb]x */

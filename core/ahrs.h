@@ -68,6 +68,12 @@ typedef struct {
     float gyro_act, acc_act; /* activity measures for the stationary detector */
     int stationary;
     float f_anchor[3]; /* specific force direction when the stationary period began */
+    float acc_lpf[3];
+
+    /* wind triangle from GNSS in turns: x = [horizontal airspeed, wind north, wind east] */
+    float wx[3];
+    float wP[3][3];
+    float alpha_est; /* mean angle of attack (body x vs air-relative velocity), rad */
     double t_pseudo;
 
     /* magnetometer */

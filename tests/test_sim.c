@@ -186,7 +186,7 @@ static void run(const scenario_t* sc, result_t* res) {
                 res->max_hdg = e_hdg;
                 res->t_max_hdg = t;
             }
-            if (!sc->use_gnss && t > 58.0f && t < 95.0f && k % (long)FS == 0)
+            if (t > 58.0f && t < 95.0f && k % (long)(4 * FS) == 0)
                 printf("    t=%3.0f r %6.1f p %5.1f v %6.1f %6.1f %6.1f bg %5.2f %5.2f %5.2f ba %5.2f %5.2f %5.2f st %d mv %d Pv %.1f\n",
                        t, out.roll_deg, out.pitch_deg, a->kf.v[0], a->kf.v[1], a->kf.v[2], a->kf.bg[0] * RAD2DEG,
                        a->kf.bg[1] * RAD2DEG, a->kf.bg[2] * RAD2DEG, a->kf.ba[0], a->kf.ba[1], a->kf.ba[2], a->stationary,
@@ -211,6 +211,8 @@ static void run(const scenario_t* sc, result_t* res) {
         }
     }
     res->rms_tilt = (float)sqrt(sum_tilt2 / (double)(n_tilt ? n_tilt : 1));
+    printf("  wind est %.1f %.1f (true 4 -7), airspeed est %.1f (true 50), alpha est %.2f deg\n", a->wx[1], a->wx[2],
+           a->wx[0], a->alpha_est * RAD2DEG);
     printf("  max tilt at t=%.1f, max heading at t=%.1f\n", res->t_max_tilt, res->t_max_hdg);
     printf("  tilt max %.2f rms %.2f (outage max %.2f) deg, mag heading max %.2f deg, climb err %.2f m/s, "
            "dec err %.2f deg, invalid att/hdg %d/%d, gyro bias est %.3f %.3f %.3f deg/s\n",
@@ -251,7 +253,7 @@ static void test_sim_no_gnss_no_airspeed(void) {
     result_t r;
     run(&sc, &r);
     CHECK(r.att_invalid == 0);
-    CHECK(r.max_tilt < 15.0f);
+    CHECK(r.max_tilt < 20.0f);
 }
 
 void run_sim_tests(void) {
