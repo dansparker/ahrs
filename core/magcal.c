@@ -92,10 +92,13 @@ int magcal_covered_bins(const magcal_t* c) {
 }
 
 int magcal_solve(const double th[9], float scale, magcal_params_t* out) {
-    const float A[3][3] = {{(float)th[0], (float)th[3], (float)th[4]},
-                           {(float)th[3], (float)th[1], (float)th[5]},
-                           {(float)th[4], (float)th[5], (float)th[2]}};
-    const float g[3] = {(float)th[6], (float)th[7], (float)th[8]};
+    /* quadric x^2 + b y^2 + c z^2 + 2d xy + 2e xz + 2f yz + 2g x + 2h y + 2i z + j = 0 (x^2 coefficient
+     * fixed to 1: always well defined, also when the ellipsoid passes near the origin) */
+    const float A[3][3] = {{1.0f, (float)th[2], (float)th[3]},
+                           {(float)th[2], (float)th[0], (float)th[4]},
+                           {(float)th[3], (float)th[4], (float)th[1]}};
+    const float g[3] = {(float)th[5], (float)th[6], (float)th[7]};
+    const float j = (float)th[8];
     float e[3], V[3][3];
     sym3_eig(A, e, V);
     for (int i = 0; i < 3; ++i)
@@ -108,7 +111,7 @@ int magcal_solve(const double th[9], float scale, magcal_params_t* out) {
     }
     float Ao[3];
     m3_mul_v(A, o, Ao);
-    const float kk = 1.0f + v3_dot(o, Ao);
+    const float kk = v3_dot(o, Ao) - j;
     if (!(kk > 1e-6f)) return 0;
     float s[3], emax = 0.0f, emin = 1e30f;
     for (int i = 0; i < 3; ++i) {
@@ -131,19 +134,20 @@ int magcal_solve(const double th[9], float scale, magcal_params_t* out) {
 
 static void rls9(magcal_t* c, const float raw[3]) {
     const double x = raw[0] / MAGCAL_SCALE, y = raw[1] / MAGCAL_SCALE, z = raw[2] / MAGCAL_SCALE;
-    const double phi[9] = {x * x, y * y, z * z, 2 * x * y, 2 * x * z, 2 * y * z, 2 * x, 2 * y, 2 * z};
+    /* target x^2, regressor of the remaining quadric terms */
+    const double phi[9] = {-y * y, -z * z, -2 * x * y, -2 * x * z, -2 * y * z, -2 * x, -2 * y, -2 * z, -1.0};
     double Pphi[9], den = 1.0, pred = 0.0;
     for (int i = 0; i < 9; ++i) {
         double s = 0.0;
-        for (int j = 0; j < 9; ++j) s += c->P[i][j] * phi[j];
+        for (int k = 0; k < 9; ++k) s += c->P[i][k] * phi[k];
         Pphi[i] = s;
         den += phi[i] * s;
         pred += phi[i] * c->th[i];
     }
-    const double err = 1.0 - pred;
+    const double err = x * x - pred;
     for (int i = 0; i < 9; ++i) {
         c->th[i] += Pphi[i] / den * err;
-        for (int j = 0; j < 9; ++j) c->P[i][j] -= Pphi[i] * Pphi[j] / den;
+        for (int k = 0; k < 9; ++k) c->P[i][k] -= Pphi[i] * Pphi[k] / den;
     }
 }
 

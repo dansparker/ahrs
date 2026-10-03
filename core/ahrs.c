@@ -90,7 +90,7 @@ static void pseudo_measurements(ahrs_t* a) {
     const int gnss_ok = a->gnss == GNSS_OK;
     const int zupt_ok = (gnss_ok && a->last_gs < 0.5f) || (!a->ever_moved && a->gnss == GNSS_NONE);
     if (a->stationary && zupt_ok) {
-        for (int i = 0; i < 3; ++i) eskf_update_body_vel(f, i, 0.0f, sq(0.05f), 0.0f);
+        for (int i = 0; i < 3; ++i) eskf_update_body_vel(f, i, 0.0f, sq(0.1f), 0.0f);
         return;
     }
     if (gnss_ok || a->gnss == GNSS_COAST) return;
@@ -130,7 +130,20 @@ void ahrs_imu(ahrs_t* a, const float gyro[3], const float acc[3], float dt) {
     a->latg_lpf += k_latg * (a->acc_c[1] / GRAVITY - a->latg_lpf);
     a->gyro_act += k_act * (v3_norm(a->gyro_c) - a->gyro_act);
     a->acc_act += k_act * (fabsf(v3_norm(a->acc_c) - GRAVITY) - a->acc_act);
-    a->stationary = a->gyro_act < 0.03f && a->acc_act < 0.3f;
+    /* Stationary: calm gyro and accelerometer, and the specific force keeps its direction.
+     * A direction change without rotation is linear acceleration (e.g. take-off roll): moving. */
+    const int calm = a->gyro_act < 0.03f && a->acc_act < 0.3f;
+    const float fn = v3_norm(a->acc_c);
+    if (calm && !a->stationary && fn > 1.0f) {
+        for (int i = 0; i < 3; ++i) a->f_anchor[i] = a->acc_c[i] / fn;
+        a->stationary = 1;
+    } else if (a->stationary) {
+        const float c = fn > 1.0f ? v3_dot(a->acc_c, a->f_anchor) / fn : 0.0f;
+        if (!calm || c < 0.99985f) { /* > 1 deg */
+            if (calm) a->ever_moved = 1;
+            a->stationary = 0;
+        }
+    }
 
     /* GNSS supervision */
     if (a->gnss == GNSS_OK && a->t - a->t_gnss_ok > a->cfg.gnss_timeout_s) a->gnss = GNSS_COAST;
@@ -190,6 +203,7 @@ void ahrs_airspeed(ahrs_t* a, float ias_ms, float tas_ms) {
     a->ias = ias_ms;
     a->tas = tas_ms;
     a->t_airspeed = a->t;
+    if (ias_ms > 15.0f) a->ever_moved = 1;
 }
 
 static void lla_to_ned(const ahrs_t* a, double lat, double lon, float h, float ned[3]) {

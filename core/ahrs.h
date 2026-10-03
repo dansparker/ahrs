@@ -67,6 +67,7 @@ typedef struct {
     float rate_lpf[3], latg_lpf;
     float gyro_act, acc_act; /* activity measures for the stationary detector */
     int stationary;
+    float f_anchor[3]; /* specific force direction when the stationary period began */
     double t_pseudo;
 
     /* magnetometer */

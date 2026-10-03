@@ -23,6 +23,7 @@ typedef struct {
 } scenario_t;
 
 typedef struct {
+    float t_max_tilt, t_max_hdg;
     float max_tilt, rms_tilt, max_tilt_outage, max_hdg, max_climb_err;
     int att_invalid, hdg_invalid;
     gnss_state_t st_coast, st_lost, st_recovered;
@@ -172,12 +173,24 @@ static void run(const scenario_t* sc, result_t* res) {
             if (!(out.valid & AHRS_OUT_ATTITUDE)) res->att_invalid++;
             if (!(out.valid & AHRS_OUT_HEADING)) res->hdg_invalid++;
             const float e_tilt = fmaxf(angdiff_deg(out.roll_deg, tr * RAD2DEG), angdiff_deg(out.pitch_deg, tp * RAD2DEG));
-            res->max_tilt = fmaxf(res->max_tilt, e_tilt);
+            if (e_tilt > res->max_tilt) {
+                res->max_tilt = e_tilt;
+                res->t_max_tilt = t;
+            }
             if (in_outage || (sc->outage_to > 0 && t >= sc->outage_to && t < sc->outage_to + 30.0f))
                 res->max_tilt_outage = fmaxf(res->max_tilt_outage, e_tilt);
             sum_tilt2 += e_tilt * e_tilt;
             n_tilt++;
-            if (t > 10.0f) res->max_hdg = fmaxf(res->max_hdg, angdiff_deg(out.heading_mag_deg, (ty - DEC_TRUE) * RAD2DEG));
+            const float e_hdg = angdiff_deg(out.heading_mag_deg, (ty - DEC_TRUE) * RAD2DEG);
+            if (t > 10.0f && e_hdg > res->max_hdg) {
+                res->max_hdg = e_hdg;
+                res->t_max_hdg = t;
+            }
+            if (k % (long)(30 * FS) == 0)
+                printf("    t=%3.0f roll %6.2f/%6.2f pitch %5.2f/%5.2f hdg %6.2f/%6.2f gnss %d stat %d
+", t, out.roll_deg,
+                       tr * RAD2DEG, out.pitch_deg, tp * RAD2DEG, out.heading_mag_deg, wrap_360((ty - DEC_TRUE) * RAD2DEG),
+                       out.gnss_state, a->stationary);
             if (t > 110.0f && t < 150.0f && (out.valid & AHRS_OUT_CLIMB))
                 res->max_climb_err = fmaxf(res->max_climb_err, fabsf(out.climb_ms + vz));
         }
@@ -194,6 +207,8 @@ static void run(const scenario_t* sc, result_t* res) {
         }
     }
     res->rms_tilt = (float)sqrt(sum_tilt2 / (double)(n_tilt ? n_tilt : 1));
+    printf("  max tilt at t=%.1f, max heading at t=%.1f
+", res->t_max_tilt, res->t_max_hdg);
     printf("  tilt max %.2f rms %.2f (outage max %.2f) deg, mag heading max %.2f deg, climb err %.2f m/s, "
            "dec err %.2f deg, invalid att/hdg %d/%d, gyro bias est %.3f %.3f %.3f deg/s\n",
            res->max_tilt, res->rms_tilt, res->max_tilt_outage, res->max_hdg, res->max_climb_err, res->dec_err,
