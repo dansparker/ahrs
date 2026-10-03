@@ -122,7 +122,7 @@ void gnss_configure(void) {
     for (int r = 0; r < 3; ++r) {
         set_baud(rates[r]);
         for (unsigned n = 0;; ++n) {
-            const size_t len = ubx_config_msg(n, 115200u, 5u, m);
+            const size_t len = ubx_config_msg(n, 115200u, GNSS_RATE_HZ, m);
             if (!len) break;
             HAL_UART_Transmit(&huart1, m, (uint16_t)len, 200);
             HAL_Delay(30);

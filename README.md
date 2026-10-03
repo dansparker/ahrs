@@ -9,7 +9,7 @@ GNSS-Daten und UTC-Zeit über CAN-Bus (CANaerospace, ADR 0002).
 | Beschleunigung + Drehrate | LSM6DSOX (208 Hz, ±8 g, 500 °/s) | I2C1 PB6/PB7 |
 | Magnetometer | LIS3MDL (80 Hz, ±4 G, UHP) | I2C1 |
 | Barometer | MS5611 (GY-63, OSR 4096) | SPI1 PA4–PA7 |
-| GNSS | u-blox, UBX-NAV-PVT 5 Hz, 115200 Bd | USART1 PA9/PA10 |
+| GNSS | u-blox, UBX-NAV-PVT 10 Hz, 115200 Bd | USART1 PA9/PA10 |
 | CAN | ATA6561, 500 kbit/s | CAN1 PB8/PB9, STB PB4 |
 
 Pinbelegung und Einbaulage: [`firmware/src/board.h`](firmware/src/board.h).
@@ -34,7 +34,7 @@ tests/     Unit-Tests und Flugsimulation (läuft in der CI mit AddressSanitizer/
 ## Sensorfusion
 
 * **Prädiktion** mit 208 Hz (Strapdown, Quaternion), Kovarianz voll 17×17.
-* **GNSS** (5 Hz): Position und Geschwindigkeit NED als skalare Updates mit χ²-Gate; Genauigkeit aus
+* **GNSS** (10 Hz, `GNSS_RATE_HZ`): Position und Geschwindigkeit NED als skalare Updates mit χ²-Gate; Genauigkeit aus
   `hAcc/vAcc/sAcc`. Erste Position setzt den Ursprung; ab 20 km wird er nachgeführt.
 * **Barometer**: Druckhöhe mit Bias-Zustand (Baro − GNSS-Höhe); daraus Höhe und Steigrate.
 * **Magnetometer**: nur als Kurs-Messung (verändert Roll/Pitch nicht), mit Plausibilitätsprüfung

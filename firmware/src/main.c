@@ -2,7 +2,7 @@
  * main.c - AHRS firmware for the STM32F446RE (WeAct core board).
  *
  * Loop: poll the IMU at 208 Hz -> ESKF; magnetometer every 4th sample (52 Hz); MS5611 ~95 Hz;
- * UBX NAV-PVT 5 Hz; CANaerospace output 50 Hz (attitude/air data), 10 Hz (GNSS, UTC/date);
+ * UBX NAV-PVT 10 Hz (GNSS_RATE_HZ); CANaerospace output 50 Hz (attitude/air data), 10 Hz (GNSS, UTC/date);
  * MS4525DO read at 20 Hz (not fused).
  */
 #include <string.h>

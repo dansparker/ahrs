@@ -31,6 +31,10 @@
 #define IMU_MOUNT {{1, 0, 0}, {0, -1, 0}, {0, 0, -1}}
 #define MAG_MOUNT {{1, 0, 0}, {0, -1, 0}, {0, 0, -1}}
 
+/* GNSS navigation rate (UBX-NAV-PVT). u-blox M8 does 10 Hz only with a single constellation
+ * (otherwise it rejects the rate and keeps 1 Hz); M9/M10 handle 10 Hz with several. */
+#define GNSS_RATE_HZ 10u
+
 /* MS4525DO on I2C2: address 0x28 (I2C address code I), range and output type of the part
  * (e.g. MS4525DO-DS5AI001DP: +-1 psi, type A) */
 #define MS4525_ADDR 0x28u

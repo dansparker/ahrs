@@ -1,7 +1,7 @@
 /*
  * Closed-loop simulation: a light aircraft taxis, takes off, climbs and flies coordinated turns
  * in wind. Synthetic IMU (with biases and noise), magnetometer (hard and soft iron), barometer,
- * GNSS (5 Hz, with an outage) and optional airspeed drive the AHRS; outputs are compared with truth.
+ * GNSS (10 Hz, with an outage) and optional airspeed drive the AHRS; outputs are compared with truth.
  */
 #include <stdlib.h>
 #include <string.h>
@@ -137,7 +137,7 @@ static void run(const scenario_t* sc, result_t* res) {
         const int in_outage = t >= sc->outage_from && t < sc->outage_to;
         const int silent = in_outage && t < 0.5f * (sc->outage_from + sc->outage_to);
         if (sc->use_gnss && t >= next_gnss && !silent) {
-            next_gnss += 0.2;
+            next_gnss += 0.1; /* 10 Hz */
             ubx_pvt_t g;
             memset(&g, 0, sizeof(g));
             const double s0 = sin(LAT0 * AHRS_PI / 180.0), w0 = sqrt(1.0 - 6.69437999014e-3 * s0 * s0);
