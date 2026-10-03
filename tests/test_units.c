@@ -5,6 +5,7 @@
 #include "../core/can_out.h"
 #include "../core/canas.h"
 #include "../core/magcal.h"
+#include "../core/ms4525.h"
 #include "../core/ubx.h"
 #include "test.h"
 
@@ -259,7 +260,31 @@ static void test_eig(void) {
     }
 }
 
+static void test_ms4525(void) {
+    const ms4525_range_t r = {-1.0f, 1.0f, 0};
+    float dp, tc;
+    /* mid scale (8192 counts) = 0 Pa; 10 % = -1 psi; 90 % = +1 psi; status bits */
+    const uint8_t zero[4] = {0x20, 0x00, 0x7F, 0xE0}; /* p = 8192, t = 1023 */
+    CHECK(ms4525_decode(zero, &r, &dp, &tc) == MS4525_OK);
+    CHECK_NEAR(dp, 0.0f, 1.0f);
+    CHECK_NEAR(tc, 1023.0f * 200.0f / 2047.0f - 50.0f, 1e-3f);
+    const uint8_t lo[4] = {0x06, 0x66, 0x00, 0x00}; /* p = 1638 */
+    ms4525_decode(lo, &r, &dp, &tc);
+    CHECK_NEAR(dp, -6894.757f, 3.0f);
+    CHECK_NEAR(tc, -50.0f, 1e-3f);
+    const uint8_t hi[4] = {0x39, 0x9A, 0xFF, 0xE0}; /* p = 14746, t = 2047 */
+    ms4525_decode(hi, &r, &dp, &tc);
+    CHECK_NEAR(dp, 6894.757f, 3.0f);
+    CHECK_NEAR(tc, 150.0f, 1e-3f);
+    const uint8_t stale[4] = {0xA0, 0x00, 0x7F, 0xE0};
+    CHECK(ms4525_decode(stale, &r, &dp, &tc) == MS4525_STALE);
+    CHECK_NEAR(dp, 0.0f, 1.0f);
+    const uint8_t fault[4] = {0xC0, 0, 0, 0};
+    CHECK(ms4525_decode(fault, &r, &dp, &tc) == MS4525_FAULT);
+}
+
 void run_unit_tests(void) {
+    RUN(test_ms4525);
     RUN(test_canas);
     RUN(test_can_out);
     RUN(test_ubx);

@@ -2,10 +2,12 @@
 #include "sensors.h"
 
 #include "baro.h"
+#include "ms4525.h"
 #include "board.h"
 
 extern I2C_HandleTypeDef hi2c1;
 extern SPI_HandleTypeDef hspi1;
+extern I2C_HandleTypeDef hi2c2;
 
 #define I2C_TIMEOUT_MS 3u
 
@@ -113,6 +115,16 @@ int mag_read(float ut[3]) {
     for (int i = 0; i < 3; ++i) m[i] = (float)(int16_t)(b[2 * i] | b[2 * i + 1] << 8) * LIS_SCALE;
     mount(mag_mount, m, ut);
     return 1;
+}
+
+/* --- MS4525DO over I2C2 (read out only; the fusion does not use it) --- */
+int airspeed_read(float* dp_pa, float* temp_c) {
+    static const ms4525_range_t range = MS4525_RANGE;
+    uint8_t b[4];
+    if (HAL_I2C_Master_Receive(&hi2c2, (uint16_t)(MS4525_ADDR << 1), b, 4, I2C_TIMEOUT_MS) != HAL_OK) return -1;
+    const int st = ms4525_decode(b, &range, dp_pa, temp_c);
+    if (st == MS4525_FAULT) return -1;
+    return st == MS4525_OK;
 }
 
 /* --- MS5611 over SPI1, chip select PA4 --- */

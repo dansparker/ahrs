@@ -13,7 +13,7 @@ HAL_SRC = stm32f4xx_hal.c stm32f4xx_hal_cortex.c stm32f4xx_hal_rcc.c stm32f4xx_h
           stm32f4xx_hal_uart.c stm32f4xx_hal_can.c stm32f4xx_hal_flash.c stm32f4xx_hal_flash_ex.c stm32f4xx_hal_iwdg.c
 
 APP_SRC = src/main.c src/sensors.c src/comms.c \
-          ../core/eskf.c ../core/magcal.c ../core/ahrs.c ../core/ubx.c ../core/canas.c ../core/can_out.c ../core/baro.c
+          ../core/eskf.c ../core/magcal.c ../core/ahrs.c ../core/ubx.c ../core/canas.c ../core/can_out.c ../core/baro.c ../core/ms4525.c
 
 SRC = $(APP_SRC) $(addprefix $(HAL)/,$(HAL_SRC)) $(D)/cmsis_device_f4/Source/Templates/system_stm32f4xx.c
 ASM = $(D)/cmsis_device_f4/Source/Templates/gcc/startup_stm32f446xx.s

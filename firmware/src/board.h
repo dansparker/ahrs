@@ -6,7 +6,7 @@
  *   SPI1  PA5 SCK / PA6 MISO / PA7 MOSI, PA4 CS   MS5611 (GY-63, PS low = SPI), J3
  *   USART1 PA9 TX / PA10 RX      u-blox GNSS (UBX), J5/J7
  *   CAN1  PB8 RX / PB9 TX, PB4 STB (low = normal)  ATA6561, J10/J12
- *   I2C2  PB10 SCL / PC12 SDA    airspeed sensor (J1), not used yet
+ *   I2C2  PB10 SCL / PC12 SDA    MS4525DO differential pressure (J1): read out only, not fused
  *   LEDs  PC13 ER_GPS, PC14 ER_AHRS, PC0 SC_OK, PC15 ER_ARINC (active high), PB2 blue LED on the core board
  *   INT1 PA15, INT2 PD2, INT_M PA8, DRDY PB12 (not used: the IMU is polled)
  */
@@ -30,5 +30,10 @@
  */
 #define IMU_MOUNT {{1, 0, 0}, {0, -1, 0}, {0, 0, -1}}
 #define MAG_MOUNT {{1, 0, 0}, {0, -1, 0}, {0, 0, -1}}
+
+/* MS4525DO on I2C2: address 0x28 (I2C address code I), range and output type of the part
+ * (e.g. MS4525DO-DS5AI001DP: +-1 psi, type A) */
+#define MS4525_ADDR 0x28u
+#define MS4525_RANGE {-1.0f, 1.0f, 0}
 
 #endif

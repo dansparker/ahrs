@@ -2,7 +2,8 @@
  * main.c - AHRS firmware for the STM32F446RE (WeAct core board).
  *
  * Loop: poll the IMU at 208 Hz -> ESKF; magnetometer every 4th sample (52 Hz); MS5611 ~95 Hz;
- * UBX NAV-PVT 5 Hz; CANaerospace output 50 Hz (attitude/air data), 10 Hz (GNSS), 1 Hz (UTC/date).
+ * UBX NAV-PVT 5 Hz; CANaerospace output 50 Hz (attitude/air data), 10 Hz (GNSS, UTC/date);
+ * MS4525DO read at 20 Hz (not fused).
  */
 #include <string.h>
 
@@ -14,6 +15,7 @@
 
 CAN_HandleTypeDef hcan1;
 I2C_HandleTypeDef hi2c1;
+I2C_HandleTypeDef hi2c2;
 SPI_HandleTypeDef hspi1;
 UART_HandleTypeDef huart1;
 IWDG_HandleTypeDef hiwdg;
@@ -21,6 +23,10 @@ canas_tx_t g_canas;
 
 static ahrs_t ahrs;
 static ubx_parser_t ubx;
+
+/* MS4525DO read-out (debugger / future use); deliberately not fed into the fusion */
+volatile float g_diff_pressure_pa, g_pitot_temp_c;
+volatile uint32_t g_diff_pressure_ok;
 
 #define LED_ER_GPS GPIOC, GPIO_PIN_13
 #define LED_ER_AHRS GPIOC, GPIO_PIN_14
@@ -73,6 +79,7 @@ static void periph_init(void) {
     __HAL_RCC_GPIOB_CLK_ENABLE();
     __HAL_RCC_GPIOC_CLK_ENABLE();
     __HAL_RCC_I2C1_CLK_ENABLE();
+    __HAL_RCC_I2C2_CLK_ENABLE();
     __HAL_RCC_SPI1_CLK_ENABLE();
     __HAL_RCC_USART1_CLK_ENABLE();
     __HAL_RCC_CAN1_CLK_ENABLE();
@@ -92,6 +99,8 @@ static void periph_init(void) {
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_4, GPIO_PIN_SET);
 
     gpio_af(GPIOB, GPIO_PIN_6 | GPIO_PIN_7, GPIO_MODE_AF_OD, GPIO_PULLUP, GPIO_AF4_I2C1);
+    gpio_af(GPIOB, GPIO_PIN_10, GPIO_MODE_AF_OD, GPIO_PULLUP, GPIO_AF4_I2C2);
+    gpio_af(GPIOC, GPIO_PIN_12, GPIO_MODE_AF_OD, GPIO_PULLUP, GPIO_AF4_I2C2);
     gpio_af(GPIOA, GPIO_PIN_5 | GPIO_PIN_6 | GPIO_PIN_7, GPIO_MODE_AF_PP, GPIO_NOPULL, GPIO_AF5_SPI1);
     gpio_af(GPIOA, GPIO_PIN_9 | GPIO_PIN_10, GPIO_MODE_AF_PP, GPIO_PULLUP, GPIO_AF7_USART1);
     gpio_af(GPIOB, GPIO_PIN_8 | GPIO_PIN_9, GPIO_MODE_AF_PP, GPIO_NOPULL, GPIO_AF9_CAN1);
@@ -101,6 +110,10 @@ static void periph_init(void) {
     hi2c1.Init.DutyCycle = I2C_DUTYCYCLE_2;
     hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
     if (HAL_I2C_Init(&hi2c1) != HAL_OK) fatal();
+    hi2c2.Instance = I2C2;
+    hi2c2.Init = hi2c1.Init;
+    hi2c2.Init.ClockSpeed = 100000;
+    if (HAL_I2C_Init(&hi2c2) != HAL_OK) fatal();
 
     hspi1.Instance = SPI1;
     hspi1.Init.Mode = SPI_MODE_MASTER;
@@ -188,8 +201,9 @@ int main(void) {
     magcal_params_t mp;
     if (store_load(&mp)) ahrs_set_magcal(&ahrs, &mp);
 
-    uint32_t t_imu = micros(), t_fast = HAL_GetTick(), t_gnss_out = t_fast, t_time_out = t_fast, t_pvt = t_fast;
+    uint32_t t_imu = micros(), t_fast = HAL_GetTick(), t_gnss_out = t_fast, t_pvt = t_fast;
     uint32_t imu_errors = 0, imu_n = 0, t_imu_ok = t_fast;
+    uint32_t t_airspeed = t_fast;
     int save_pending = 0;
     canas_frame_t fr[CAN_OUT_MAX_FRAMES];
 
@@ -214,6 +228,15 @@ int main(void) {
             imu_errors = 0;
         }
         if (baro_poll(now_us, &p)) ahrs_baro(&ahrs, p);
+        if (now_ms - t_airspeed >= 50u) { /* 20 Hz */
+            t_airspeed = now_ms;
+            float dp, tc;
+            if (airspeed_read(&dp, &tc) > 0) {
+                g_diff_pressure_pa = dp;
+                g_pitot_temp_c = tc;
+                g_diff_pressure_ok++;
+            }
+        }
 
         uint8_t c;
         ubx_pvt_t pvt;
@@ -235,13 +258,9 @@ int main(void) {
             t_fast += 20u;
             groups |= CAN_OUT_FAST;
         }
-        if (now_ms - t_gnss_out >= 100u) {
+        if (now_ms - t_gnss_out >= 100u) { /* OpenEFIS drops values older than 500 ms: time at 10 Hz too */
             t_gnss_out += 100u;
-            groups |= CAN_OUT_GNSS;
-        }
-        if (now_ms - t_time_out >= 1000u) {
-            t_time_out += 1000u;
-            groups |= CAN_OUT_TIME;
+            groups |= CAN_OUT_GNSS | CAN_OUT_TIME;
         }
         if (groups) {
             ahrs_out_t o;

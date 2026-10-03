@@ -14,5 +14,7 @@ int mag_read(float ut[3]);
 int baro_init(void);
 /* Runs the MS5611 conversion state machine; returns 1 with a new pressure (Pa). */
 int baro_poll(uint32_t now_us, float* p_pa);
+/* MS4525DO on I2C2: 1 = new value (Pa, pitot - static; degC), 0 = no new conversion, -1 = error */
+int airspeed_read(float* dp_pa, float* temp_c);
 
 #endif

@@ -96,7 +96,7 @@ liefert erwartungsgemÃ¤ÃŸ keine LÃ¶sung; die NachfÃ¼hrung findet einen Rest-Offs
 |---|---|
 | 50 Hz | 311 Pitch, 312 Roll, 1069 Kurs (missweisend), 301 Querbeschleunigung, 303 Nickrate, 305 Gierrate, 322 DruckhÃ¶he (1013,25), 314 Steigrate |
 | 10 Hz | 1036/1037 Lat/Lon, 1038 HÃ¶he (Ellipsoid), 1039 Grundgeschwindigkeit, 1040 Track, 1048 Fix, 1800 Satelliten, 1121 Missweisung |
-| 1 Hz | **1200 UTC** (UCHAR4: h, min, s, 0), **1201 Datum** (UCHAR4: Tag, Monat, Jahr % 100, Jahr / 100) |
+| 10 Hz | **1200 UTC** (UCHAR4: h, min, s, 0), **1201 Datum** (UCHAR4: Tag, Monat, Jahr % 100, Jahr / 100) – auch ohne Positionslösung, sobald der Empfänger eine gültige Zeit hat |
 
 Werte ohne GÃ¼ltigkeit werden nicht gesendet (OpenEFIS zeigt dann rotes X/Striche). Anfragen des
 Identifikationsdienstes (ID 128) werden auf ID 129 beantwortet.
