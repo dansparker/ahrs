@@ -44,6 +44,9 @@ int can_init(void) {
     fl.FilterActivation = ENABLE;
     fl.SlaveStartFilterBank = 14;
     if (HAL_CAN_ConfigFilter(&hcan1, &fl) != HAL_OK) return 0;
+    fl.FilterBank = 1; /* magnetic variation from the display */
+    fl.FilterIdHigh = (uint16_t)(CANAS_ID_MAG_VAR << 5);
+    if (HAL_CAN_ConfigFilter(&hcan1, &fl) != HAL_OK) return 0;
     if (HAL_CAN_Start(&hcan1) != HAL_OK) return 0;
     return HAL_CAN_ActivateNotification(&hcan1, CAN_IT_TX_MAILBOX_EMPTY | CAN_IT_RX_FIFO0_MSG_PENDING) == HAL_OK;
 }
@@ -69,10 +72,32 @@ void HAL_CAN_TxMailbox0AbortCallback(CAN_HandleTypeDef* h) { (void)h; refill(); 
 void HAL_CAN_TxMailbox1AbortCallback(CAN_HandleTypeDef* h) { (void)h; refill(); }
 void HAL_CAN_TxMailbox2AbortCallback(CAN_HandleTypeDef* h) { (void)h; refill(); }
 
+static volatile float rx_variation;
+static volatile int rx_variation_new;
+
+int can_take_variation(float* deg) {
+    if (!rx_variation_new) return 0;
+    __disable_irq();
+    *deg = rx_variation;
+    rx_variation_new = 0;
+    __enable_irq();
+    return 1;
+}
+
 void HAL_CAN_RxFifo0MsgPendingCallback(CAN_HandleTypeDef* h) {
     CAN_RxHeaderTypeDef rh;
     uint8_t d[8];
     if (HAL_CAN_GetRxMessage(h, CAN_RX_FIFO0, &rh, d) != HAL_OK || rh.IDE != CAN_ID_STD) return;
+    if (rh.StdId == CANAS_ID_MAG_VAR) {
+        const int from_display = (EFIS_NODE_ID == 0u || d[0] == EFIS_NODE_ID) && d[0] != g_canas.node_id;
+        if (from_display && rh.DLC == 8 && d[1] == CANAS_FLOAT) {
+            canas_frame_t f = {CANAS_ID_MAG_VAR, 8, {0}};
+            memcpy(f.data, d, 8);
+            rx_variation = canas_get_float(&f);
+            rx_variation_new = 1;
+        }
+        return;
+    }
     canas_frame_t reply;
     if (canas_node_service(&g_canas, (uint16_t)rh.StdId, d, (uint8_t)rh.DLC, HW_REVISION, SW_REVISION, &reply)) {
         if (q_head - q_tail < CAN_QUEUE) {
@@ -134,11 +159,11 @@ void gnss_configure(void) {
 
 /* ---------------- calibration storage: flash sector 1 (0x08004000, 16 KB) ---------------- */
 #define STORE_ADDR 0x08004000u
-#define STORE_MAGIC 0x4D414731u /* "MAG1" */
+#define STORE_MAGIC 0x4D414732u /* "MAG2" */
 
 typedef struct {
     uint32_t magic;
-    magcal_params_t p;
+    store_data_t d;
     uint32_t sum;
 } store_t;
 
@@ -149,19 +174,19 @@ static uint32_t checksum(const store_t* s) {
     return c;
 }
 
-int store_load(magcal_params_t* p) {
+int store_load(store_data_t* d) {
     store_t s;
     memcpy(&s, (const void*)STORE_ADDR, sizeof(s));
-    if (s.magic != STORE_MAGIC || s.sum != checksum(&s) || !s.p.valid) return 0;
-    *p = s.p;
+    if (s.magic != STORE_MAGIC || s.sum != checksum(&s)) return 0;
+    *d = s.d;
     return 1;
 }
 
-int store_save(const magcal_params_t* p) {
+int store_save(const store_data_t* d) {
     store_t s;
     memset(&s, 0, sizeof(s));
     s.magic = STORE_MAGIC;
-    s.p = *p;
+    s.d = *d;
     s.sum = checksum(&s);
     FLASH_EraseInitTypeDef e = {0};
     uint32_t err = 0;

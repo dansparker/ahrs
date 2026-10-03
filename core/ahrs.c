@@ -14,6 +14,7 @@
 void ahrs_default_config(ahrs_config_t* c) {
     memset(c, 0, sizeof(*c));
     c->dec0_deg = 0.0f;
+    c->dec0_sigma_deg = 20.0f;
     c->gnss_timeout_s = 1.5f;
     c->gnss_coast_s = 5.0f;
     c->gnss_reset_s = 30.0f;
@@ -69,7 +70,8 @@ static void align(ahrs_t* a) {
     const float roll = atan2f(-f[1], -f[2]);
     const float pitch = atan2f(f[0], sqrtf(f[1] * f[1] + f[2] * f[2]));
     const int still = a->gyro_max < 0.05f && fabsf(v3_norm(f) - GRAVITY) < 0.5f;
-    const float dec = a->cfg.dec0_deg * DEG2RAD;
+    const float dec = a->have_ext_dec ? a->ext_dec : a->cfg.dec0_deg * DEG2RAD;
+    const float sig_dec = (a->have_ext_dec ? 0.5f : a->cfg.dec0_sigma_deg) * DEG2RAD;
     float yaw = 0.0f, sig_yaw = AHRS_PI;
     if (a->have_mag) {
         float R[3][3];
@@ -78,7 +80,7 @@ static void align(ahrs_t* a) {
         sig_yaw = 20.0f * DEG2RAD;
     }
     eskf_init(&a->kf, &a->cfg.noise, quat_from_euler(roll, pitch, yaw), (still ? 2.0f : 15.0f) * DEG2RAD, sig_yaw, dec,
-              10.0f * DEG2RAD);
+              sig_dec);
     if (still) {
         for (int i = 0; i < 3; ++i) {
             a->kf.bg[i] = g[i];
@@ -255,6 +257,18 @@ void ahrs_baro(ahrs_t* a, float p_pa) {
     a->have_baro = 1;
     a->t_baro = a->t;
     if (a->aligned) eskf_update_baro(&a->kf, a->baro_alt, sq(0.5f), 25.0f);
+}
+
+void ahrs_declination(ahrs_t* a, float dec_deg) {
+    if (!(dec_deg > -90.0f && dec_deg < 90.0f)) return;
+    a->ext_dec = dec_deg * DEG2RAD;
+    a->t_ext_dec = a->t;
+    a->have_ext_dec = 1;
+    if (!a->aligned) return; /* used as the initial value at alignment */
+    /* the model is the reference; 0.5 deg covers its error and local anomalies */
+    float H[ESKF_N] = {0};
+    H[ES_DEC] = 1.0f;
+    eskf_update(&a->kf, wrap_pi(a->ext_dec - a->kf.dec), H, sq(0.5f * DEG2RAD), 0.0f, 0);
 }
 
 void ahrs_airspeed(ahrs_t* a, float ias_ms, float tas_ms) {

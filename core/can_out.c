@@ -28,7 +28,6 @@ unsigned can_out_build(canas_tx_t* tx, const ahrs_out_t* o, unsigned groups, can
             canas_short(tx, &fr[n++], CANAS_ID_GPS_MODE, o->gps_mode);
             canas_uchar(tx, &fr[n++], CANAS_ID_GPS_SATS, o->sats);
         }
-        if (v & AHRS_OUT_VARIATION) canas_float(tx, &fr[n++], CANAS_ID_MAG_VAR, o->variation_deg);
     }
     if ((groups & CAN_OUT_TIME) && (v & AHRS_OUT_TIME)) {
         const uint8_t t[4] = {o->hour, o->min, o->sec, 0};

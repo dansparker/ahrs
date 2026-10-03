@@ -196,10 +196,15 @@ int main(void) {
 
     ahrs_config_t cfg;
     ahrs_default_config(&cfg);
-    cfg.dec0_deg = MAG_DECLINATION_DEG;
+    store_data_t stored;
+    memset(&stored, 0, sizeof(stored));
+    const int have_store = store_load(&stored);
+    if (have_store && stored.declination_valid) { /* last value from the display; it may come from elsewhere */
+        cfg.dec0_deg = stored.declination_deg;
+        cfg.dec0_sigma_deg = 3.0f;
+    }
     ahrs_init(&ahrs, &cfg);
-    magcal_params_t mp;
-    if (store_load(&mp)) ahrs_set_magcal(&ahrs, &mp);
+    if (have_store && stored.mag.valid) ahrs_set_magcal(&ahrs, &stored.mag);
 
     uint32_t t_imu = micros(), t_fast = HAL_GetTick(), t_gnss_out = t_fast, t_pvt = t_fast;
     uint32_t imu_errors = 0, imu_n = 0, t_imu_ok = t_fast;
@@ -228,6 +233,11 @@ int main(void) {
             imu_errors = 0;
         }
         if (baro_poll(now_us, &p)) ahrs_baro(&ahrs, p);
+        float var;
+        if (can_take_variation(&var)) {
+            ahrs_declination(&ahrs, var);
+            if (!stored.declination_valid || fabsf(var - stored.declination_deg) > 0.5f) save_pending = 1;
+        }
         if (now_ms - t_airspeed >= 50u) { /* 20 Hz */
             t_airspeed = now_ms;
             float dp, tc;
@@ -281,9 +291,14 @@ int main(void) {
              * erasing the flash sector blocks the CPU for up to 0.5 s */
             if (ahrs_take_magcal_changed(&ahrs)) save_pending = 1;
             const int on_ground = ahrs.stationary && ((ahrs.gnss == GNSS_OK && ahrs.last_gs < 1.0f) || !ahrs.ever_moved);
-            if (save_pending && on_ground && ahrs.mc.active.valid) {
+            if (save_pending && on_ground) {
                 HAL_IWDG_Refresh(&hiwdg);
-                store_save(&ahrs.mc.active);
+                stored.mag = ahrs.mc.active;
+                if (ahrs.have_ext_dec) {
+                    stored.declination_deg = ahrs.ext_dec * RAD2DEG;
+                    stored.declination_valid = 1;
+                }
+                store_save(&stored);
                 save_pending = 0;
                 t_imu = micros();
             }

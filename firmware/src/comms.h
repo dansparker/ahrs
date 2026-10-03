@@ -18,7 +18,16 @@ void gnss_uart_irq(void);
 int gnss_getc(uint8_t* c);
 void gnss_configure(void);
 
-int store_load(magcal_params_t* p);
-int store_save(const magcal_params_t* p);
+/* Magnetic variation received from the display (deg east); returns 1 once per new value. */
+int can_take_variation(float* deg);
+
+/* Non-volatile settings: magnetometer calibration and last magnetic variation. */
+typedef struct {
+    magcal_params_t mag;
+    float declination_deg;
+    int32_t declination_valid;
+} store_data_t;
+int store_load(store_data_t* d);
+int store_save(const store_data_t* d);
 
 #endif

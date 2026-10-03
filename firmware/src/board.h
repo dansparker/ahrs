@@ -19,8 +19,9 @@
 /* CANaerospace node ID (1..255), as configured in the OpenEFIS profile */
 #define CAN_NODE_ID 7u
 
-/* Initial magnetic declination guess, deg east (Austria ~ +5). Refined in flight with GNSS. */
-#define MAG_DECLINATION_DEG 5.0f
+/* Node ID of the display that sends the magnetic variation (1121, from its WMM);
+ * 0 = accept it from any node. Without it the AHRS uses the last stored value and refines it in turns. */
+#define EFIS_NODE_ID 1u
 
 /*
  * Sensor axes -> aircraft body axes (x forward, y right, z down): body = M * sensor.

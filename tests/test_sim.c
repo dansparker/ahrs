@@ -18,6 +18,7 @@
 typedef struct {
     int use_gnss;
     int use_airspeed;
+    int use_ext_dec; /* display sends the magnetic variation (1121) at 1 Hz */
     float outage_from, outage_to; /* no GNSS messages in [from, mid), fix lost in [mid, to) */
     float duration;
 } scenario_t;
@@ -134,6 +135,7 @@ static void run(const scenario_t* sc, result_t* res) {
             ahrs_baro(a, 101325.0f * powf(1.0f - h / 44330.77f, 1.0f / 0.190263f));
         }
         if (sc->use_airspeed && k % 10 == 0 && V > 20.0f) ahrs_airspeed(a, V, V);
+        if (sc->use_ext_dec && k % (long)FS == 0 && t > 3.0f) ahrs_declination(a, DEC_TRUE * RAD2DEG + 0.2f);
 
         const int in_outage = t >= sc->outage_from && t < sc->outage_to;
         const int silent = in_outage && t < 0.5f * (sc->outage_from + sc->outage_to);
@@ -216,7 +218,7 @@ static void run(const scenario_t* sc, result_t* res) {
 }
 
 static void test_sim_gnss_outage(void) {
-    const scenario_t sc = {1, 0, 330.0f, 450.0f, 600.0f};
+    const scenario_t sc = {1, 0, 1, 330.0f, 450.0f, 600.0f};
     result_t r;
     run(&sc, &r);
     CHECK(r.att_invalid == 0);
@@ -228,13 +230,13 @@ static void test_sim_gnss_outage(void) {
     CHECK(r.st_coast == GNSS_COAST);
     CHECK(r.st_lost == GNSS_LOST);
     CHECK(r.st_recovered == GNSS_OK);
-    CHECK(r.dec_err < 3.0f);
+    CHECK(r.dec_err < 0.5f); /* follows the display's model (0.2 deg off on purpose) */
     CHECK(r.time_ok);
     CHECK(r.gnss_out_without_fix == 0);
 }
 
 static void test_sim_no_gnss_airspeed(void) {
-    const scenario_t sc = {0, 1, 0.0f, 0.0f, 600.0f};
+    const scenario_t sc = {0, 1, 0, 0.0f, 0.0f, 600.0f};
     result_t r;
     run(&sc, &r);
     CHECK(r.att_invalid == 0);
@@ -245,15 +247,26 @@ static void test_sim_no_gnss_airspeed(void) {
 static void test_sim_no_gnss_no_airspeed(void) {
     /* worst case: no speed reference at all; centripetal acceleration in turns is only partly
      * resolved, so this is a degraded mode (heading error from tilt error x tan(dip)) */
-    const scenario_t sc = {0, 0, 0.0f, 0.0f, 600.0f};
+    const scenario_t sc = {0, 0, 0, 0.0f, 0.0f, 600.0f};
     result_t r;
     run(&sc, &r);
     CHECK(r.att_invalid == 0);
     CHECK(r.max_tilt < 10.0f);
 }
 
+static void test_sim_gnss_without_display_variation(void) {
+    /* no 1121 from the display: the declination is learned in turns from a 20 deg prior */
+    const scenario_t sc = {1, 0, 0, 0.0f, 0.0f, 600.0f};
+    result_t r;
+    run(&sc, &r);
+    CHECK(r.max_tilt < 2.5f);
+    CHECK(r.max_hdg < 5.0f);
+    CHECK(r.dec_err < 2.0f);
+}
+
 void run_sim_tests(void) {
     RUN(test_sim_gnss_outage);
     RUN(test_sim_no_gnss_airspeed);
     RUN(test_sim_no_gnss_no_airspeed);
+    RUN(test_sim_gnss_without_display_variation);
 }

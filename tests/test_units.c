@@ -65,7 +65,8 @@ static void test_can_out(void) {
     CHECK(fr[0].id == CANAS_ID_PITCH && canas_get_float(&fr[0]) == -2.0f);
     CHECK(fr[1].id == CANAS_ID_ROLL && canas_get_float(&fr[1]) == 10.0f);
     n = can_out_build(&tx, &o, CAN_OUT_GNSS, fr);
-    CHECK(n == 8);
+    CHECK(n == 7); /* variation is not sent: it comes from the display */
+    for (unsigned i = 0; i < n; ++i) CHECK(fr[i].id != CANAS_ID_MAG_VAR);
     n = can_out_build(&tx, &o, CAN_OUT_TIME, fr);
     CHECK(n == 2);
     CHECK(fr[0].id == CANAS_ID_UTC && fr[0].data[1] == CANAS_UCHAR4);

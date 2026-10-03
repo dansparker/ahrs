@@ -32,7 +32,7 @@
 #define CANAS_ID_GPS_TRACK 1040u     /* deg true */
 #define CANAS_ID_GPS_MODE 1048u      /* SHORT 0/1/2 */
 #define CANAS_ID_MAG_HEADING 1069u   /* deg */
-#define CANAS_ID_MAG_VAR 1121u       /* deg, east positive */
+#define CANAS_ID_MAG_VAR 1121u       /* deg, east positive: received from the display (WMM) */
 #define CANAS_ID_UTC 1200u           /* UCHAR4: hours, minutes, seconds, 0 */
 #define CANAS_ID_DATE 1201u          /* UCHAR4: day, month, year % 100, year / 100 */
 #define CANAS_ID_GPS_SATS 1800u      /* UCHAR (UDL) */

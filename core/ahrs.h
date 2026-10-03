@@ -16,7 +16,8 @@
 typedef enum { GNSS_NONE = 0, GNSS_OK, GNSS_COAST, GNSS_LOST } gnss_state_t;
 
 typedef struct {
-    float dec0_deg;          /* initial magnetic declination guess (east +) */
+    float dec0_deg;          /* initial magnetic declination (east +): last stored value or 0 */
+    float dec0_sigma_deg;    /* its uncertainty (large when unknown) */
     float gnss_timeout_s;    /* no valid PVT for this long -> coast */
     float gnss_coast_s;      /* pure inertial coasting before the GNSS-denied mode */
     float gnss_reset_s;      /* outage longer than this -> reset position/velocity on recovery */
@@ -90,6 +91,11 @@ typedef struct {
     double t_baro;
     int have_baro;
 
+    /* declination from the display */
+    float ext_dec;
+    double t_ext_dec;
+    int have_ext_dec;
+
     /* airspeed (optional) */
     float ias, tas;
     double t_airspeed;
@@ -114,6 +120,8 @@ void ahrs_mag(ahrs_t* a, const float raw_ut[3]);
 void ahrs_baro(ahrs_t* a, float p_pa);
 void ahrs_gnss(ahrs_t* a, const ubx_pvt_t* pvt);
 void ahrs_airspeed(ahrs_t* a, float ias_ms, float tas_ms);
+/* Magnetic variation from the display (WMM there), deg east positive. */
+void ahrs_declination(ahrs_t* a, float dec_deg);
 
 void ahrs_output(const ahrs_t* a, ahrs_out_t* o);
 /* Returns 1 once after the magnetometer calibration changed (to store it). */
