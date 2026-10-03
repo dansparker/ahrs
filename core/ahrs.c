@@ -142,8 +142,7 @@ static void pseudo_measurements(ahrs_t* a) {
      * attack as learned before the outage). This lets the filter separate centripetal acceleration
      * from gravity in turns. Sensor biases are "consider" states here: the constraint is only
      * approximate and must not be learned as an accelerometer or gyro bias. */
-    /* heading stays with gyro + magnetometer: the velocity direction is not observed here */
-    const uint32_t cm = ESKF_CONSIDER_BIASES | ESKF_BIT(ES_TH + 2);
+    const uint32_t cm = ESKF_CONSIDER_BIASES;
     const int wk = a->ever_fused && wind_known(a);
     const float w[3] = {wk ? a->wx[1] : 0.0f, wk ? a->wx[2] : 0.0f, 0.0f};
     float vb[3], va[3];
