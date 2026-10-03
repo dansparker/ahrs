@@ -109,8 +109,10 @@ sh firmware/fetch_drivers.sh      # ST CMSIS + HAL holen
 make -C firmware                  # arm-none-eabi-gcc -> firmware/build/ahrs.{elf,bin,hex}
 ```
 
-Die CI (GitHub Actions) macht beides und stellt die Firmware als Artefakt bereit. Flashen z. B. mit
-`st-flash write firmware/build/ahrs.bin 0x08000000` oder STM32CubeProgrammer (ELF).
+Die CI (GitHub Actions) macht beides und stellt die Firmware als Artefakt bereit. Flashen mit
+**`ahrs.hex` oder `ahrs.elf`** (z. B. `STM32_Programmer_CLI -c port=SWD -w ahrs.hex -rst` oder
+`st-flash --format ihex write ahrs.hex`). Nicht die `.bin` verwenden: sie füllt die Lücke ab
+0x08004000 mit Nullen und löscht damit die gespeicherte Magnetometer-Kalibrierung (Sektor 1).
 
 ## Offene Punkte / Annahmen
 

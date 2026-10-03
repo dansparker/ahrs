@@ -145,8 +145,14 @@ size_t ubx_config_msg(unsigned n, uint32_t baud, unsigned rate_hz, uint8_t* out)
         p = put32(p, 0x10740001u); *p++ = 1;          /* CFG-UART1OUTPROT-UBX */
         p = put32(p, 0x10740002u); *p++ = 0;          /* CFG-UART1OUTPROT-NMEA */
         p = put32(p, 0x20910007u); *p++ = 1;          /* CFG-MSGOUT-UBX_NAV_PVT_UART1 */
-        p = put32(p, 0x30210001u); p = put16(p, meas_ms); /* CFG-RATE-MEAS */
         p = put32(p, 0x20110021u); *p++ = 8;          /* CFG-NAVSPG-DYNMODEL: airborne <4g */
+        return ubx_frame(0x06, 0x8A, pl, (uint16_t)(p - pl), out);
+    case 4: /* VALSET: rate on its own - a receiver that cannot do it rejects only this message */
+        *p++ = 0;
+        *p++ = 0x01;
+        p += 2;
+        p = put32(p, 0x30210001u);
+        p = put16(p, meas_ms); /* CFG-RATE-MEAS */
         return ubx_frame(0x06, 0x8A, pl, (uint16_t)(p - pl), out);
     case 1: /* UBX-CFG-MSG: NAV-PVT on UART1 every solution */
         pl[0] = 0x01;
@@ -162,14 +168,14 @@ size_t ubx_config_msg(unsigned n, uint32_t baud, unsigned rate_hz, uint8_t* out)
         put16(pl, 0x0001);
         pl[2] = 8;
         return ubx_frame(0x06, 0x24, pl, 36, out);
-    case 4: /* VALSET: UART1 baud rate */
+    case 5: /* VALSET: UART1 baud rate */
         *p++ = 0;
         *p++ = 0x01;
         p += 2;
         p = put32(p, 0x40520001u);
         p = put32(p, baud);
         return ubx_frame(0x06, 0x8A, pl, (uint16_t)(p - pl), out);
-    case 5: /* UBX-CFG-PRT (M8): UART1, 8N1, UBX in/out only */
+    case 6: /* UBX-CFG-PRT (M8): UART1, 8N1, UBX in/out only */
         pl[0] = 1;
         put32(pl + 4, 0x000008C0u);
         put32(pl + 8, baud);

@@ -29,6 +29,7 @@ typedef struct {
     gnss_state_t st_coast, st_lost, st_recovered;
     float dec_err;
     int time_ok;
+    int gnss_out_without_fix;
 } result_t;
 
 static float smoothstep(float x) {
@@ -169,6 +170,7 @@ static void run(const scenario_t* sc, result_t* res) {
         ahrs_output(a, &out);
         float tr, tp, ty;
         dcm_to_euler(R, &tr, &tp, &ty);
+        if (in_outage && (out.valid & AHRS_OUT_GNSS)) res->gnss_out_without_fix++;
         if (t > 5.0f) {
             if (!(out.valid & AHRS_OUT_ATTITUDE)) res->att_invalid++;
             if (!(out.valid & AHRS_OUT_HEADING)) res->hdg_invalid++;
@@ -228,6 +230,7 @@ static void test_sim_gnss_outage(void) {
     CHECK(r.st_recovered == GNSS_OK);
     CHECK(r.dec_err < 3.0f);
     CHECK(r.time_ok);
+    CHECK(r.gnss_out_without_fix == 0);
 }
 
 static void test_sim_no_gnss_airspeed(void) {

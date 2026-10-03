@@ -281,7 +281,12 @@ void ahrs_gnss(ahrs_t* a, const ubx_pvt_t* p) {
 
     const int ok = p->fix_type >= 3 && p->fix_type <= 4 && (p->flags & 1u) && p->num_sv >= 5 && p->h_acc_m < 15.0f &&
                    p->s_acc_ms < 2.0f;
-    if (!ok || !a->aligned) return;
+    if (!ok) {
+        if (a->gnss == GNSS_OK) a->gnss = GNSS_COAST; /* receiver reports no fix: do not wait for the timeout */
+        return;
+    }
+    a->pvt_fix = *p;
+    if (!a->aligned) return;
     eskf_t* f = &a->kf;
 
     if (!a->have_origin) {
@@ -368,7 +373,7 @@ void ahrs_output(const ahrs_t* a, ahrs_out_t* o) {
         o->valid |= AHRS_OUT_IAS;
     }
 
-    const ubx_pvt_t* p = &a->pvt;
+    const ubx_pvt_t* p = &a->pvt_fix;
     if (a->gnss == GNSS_OK) {
         o->lat_deg = p->lat_deg;
         o->lon_deg = p->lon_deg;
@@ -384,12 +389,13 @@ void ahrs_output(const ahrs_t* a, ahrs_out_t* o) {
         o->valid |= AHRS_OUT_VARIATION;
     }
     if (a->t_gnss_time > 0.0 && a->t - a->t_gnss_time < 2.0) {
-        o->year = p->year;
-        o->month = p->month;
-        o->day = p->day;
-        o->hour = p->hour;
-        o->min = p->min;
-        o->sec = p->sec;
+        const ubx_pvt_t* pt = &a->pvt;
+        o->year = pt->year;
+        o->month = pt->month;
+        o->day = pt->day;
+        o->hour = pt->hour;
+        o->min = pt->min;
+        o->sec = pt->sec;
         o->valid |= AHRS_OUT_TIME;
     }
 }

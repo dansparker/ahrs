@@ -280,8 +280,8 @@ int main(void) {
             /* store a new magnetometer calibration only while standing still on the ground:
              * erasing the flash sector blocks the CPU for up to 0.5 s */
             if (ahrs_take_magcal_changed(&ahrs)) save_pending = 1;
-            if (save_pending && ahrs.stationary && (ahrs.gnss != GNSS_OK || ahrs.last_gs < 1.0f) &&
-                ahrs.mc.active.valid) {
+            const int on_ground = ahrs.stationary && ((ahrs.gnss == GNSS_OK && ahrs.last_gs < 1.0f) || !ahrs.ever_moved);
+            if (save_pending && on_ground && ahrs.mc.active.valid) {
                 HAL_IWDG_Refresh(&hiwdg);
                 store_save(&ahrs.mc.active);
                 save_pending = 0;

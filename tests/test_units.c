@@ -135,7 +135,7 @@ static void test_ubx(void) {
         uint8_t m[128];
         const size_t l = ubx_config_msg(n, 115200, 5, m);
         if (!l) {
-            CHECK(n == 6);
+            CHECK(n == 7);
             break;
         }
         uint8_t a = 0, b = 0;

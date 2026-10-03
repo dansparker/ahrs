@@ -96,7 +96,8 @@ typedef struct {
 
     /* GNSS */
     gnss_state_t gnss;
-    ubx_pvt_t pvt;
+    ubx_pvt_t pvt;     /* latest PVT (time) */
+    ubx_pvt_t pvt_fix; /* latest PVT with a valid fix (position output) */
     double t_gnss_ok, t_gnss_time;
     double lat0, lon0;
     int have_origin, ever_fused, ever_moved;
