@@ -9,6 +9,7 @@ GNSS-Daten und UTC-Zeit über CAN-Bus (CANaerospace, ADR 0002).
 | Beschleunigung + Drehrate | LSM6DSOX (208 Hz, ±8 g, 500 °/s) | I2C1 PB6/PB7 |
 | Magnetometer | LIS3MDL (80 Hz, ±4 G, UHP) | I2C1 |
 | Barometer | MS5611 (GY-63, OSR 4096) | SPI1 PA4–PA7 |
+| Differenzdruck (nur Auslesen) | MS4525DO | I2C2 PB10/PC12 |
 | GNSS | u-blox, UBX-NAV-PVT 10 Hz, 115200 Bd | USART1 PA9/PA10 |
 | CAN | ATA6561, 500 kbit/s | CAN1 PB8/PB9, STB PB4 |
 
@@ -96,7 +97,7 @@ liefert erwartungsgemäß keine Lösung; die Nachführung findet einen Rest-Offs
 |---|---|
 | 50 Hz | 311 Pitch, 312 Roll, 1069 Kurs (missweisend), 301 Querbeschleunigung, 303 Nickrate, 305 Gierrate, 322 Druckhöhe (1013,25), 314 Steigrate |
 | 10 Hz | 1036/1037 Lat/Lon, 1038 Höhe (Ellipsoid), 1039 Grundgeschwindigkeit, 1040 Track, 1048 Fix, 1800 Satelliten, 1121 Missweisung |
-| 10 Hz | **1200 UTC** (UCHAR4: h, min, s, 0), **1201 Datum** (UCHAR4: Tag, Monat, Jahr % 100, Jahr / 100) � auch ohne Positionsl�sung, sobald der Empf�nger eine g�ltige Zeit hat |
+| 10 Hz | **1200 UTC** (UCHAR4: h, min, s, 0), **1201 Datum** (UCHAR4: Tag, Monat, Jahr % 100, Jahr / 100) – auch ohne Positionslösung, sobald der Empfänger eine gültige Zeit hat |
 
 Werte ohne Gültigkeit werden nicht gesendet (OpenEFIS zeigt dann rotes X/Striche). Anfragen des
 Identifikationsdienstes (ID 128) werden auf ID 129 beantwortet.
@@ -111,8 +112,8 @@ make -C firmware                  # arm-none-eabi-gcc -> firmware/build/ahrs.{el
 
 Die CI (GitHub Actions) macht beides und stellt die Firmware als Artefakt bereit. Flashen mit
 **`ahrs.hex` oder `ahrs.elf`** (z. B. `STM32_Programmer_CLI -c port=SWD -w ahrs.hex -rst` oder
-`st-flash --format ihex write ahrs.hex`). Nicht die `.bin` verwenden: sie f�llt die L�cke ab
-0x08004000 mit Nullen und l�scht damit die gespeicherte Magnetometer-Kalibrierung (Sektor 1).
+`st-flash --format ihex write ahrs.hex`). Nicht die `.bin` verwenden: sie füllt die Lücke ab
+0x08004000 mit Nullen und löscht damit die gespeicherte Magnetometer-Kalibrierung (Sektor 1).
 
 ## Offene Punkte / Annahmen
 
@@ -121,6 +122,7 @@ Die CI (GitHub Actions) macht beides und stellt die Firmware als Artefakt bereit
 * **Einbaulage** `IMU_MOUNT`/`MAG_MOUNT` in `board.h` an die Achspfeile des Breakouts anpassen.
 * **PB11 (J2)**: Beim STM32F446RE im 64-Pin-Gehäuse ist dieser Pin VCAP_1 – kein GPIO.
 * **Zeit-Identifier 1200/1201**: Belegung nach CANaerospace-Tabelle, bitte mit der Spezifikation
-  abgleichen; OpenEFIS dekodiert sie bisher nicht (Erweiterung des Moduls `canaerospace` nötig).
-* **Staudrucksensor** an I2C2 (J1): Typ unbekannt, noch kein Treiber. `ahrs_airspeed()` ist
-  vorbereitet und verbessert den GNSS-losen Betrieb deutlich.
+  abgleichen. OpenEFIS-Seite: [open-efis#27](https://github.com/dansparker/open-efis/pull/27).
+* **MS4525DO** an I2C2 (J1, 0x28, ±1 psi Typ A in `board.h`): wird mit 20 Hz ausgelesen
+  (`airspeed_read()`, Werte in `g_diff_pressure_pa`/`g_pitot_temp_c`), fließt aber bewusst **nicht**
+  in die Fusion ein und wird nicht gesendet. `ahrs_airspeed()` wäre die Schnittstelle dafür.
