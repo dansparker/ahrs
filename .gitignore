@@ -2,3 +2,4 @@ firmware/Drivers/
 firmware/build/
 tests/ahrs_tests
 *.o
+~$*
